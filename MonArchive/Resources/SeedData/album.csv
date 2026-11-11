@@ -1,0 +1,11 @@
+image_key,source_type,album_title,artist,release_year,physical_format,track_count,genres,launch_reference_price_usd,current_reference_price_usd,price_updated_on
+album_001,user_added,Nothing’s Gonna Change My Love for You,Glenn Medeiros,1987,7-inch / 12-inch single,3,"retro pop, love song",5,8,2026-10-02
+album_002,user_added,Blue Neighbourhood,Troye Sivan,2015,2LP (Deluxe Edition),16,"pop, electropop",35,52,2026-10-02
+album_003,user_added,Animal,Kesha,2010,LP,14,"dance-pop, electropop",25,35,2026-10-02
+album_004,user_added,New Jeans (1st EP),NewJeans,2022,CD / Bag Version,4,"K-pop, Y2K pop",25,30,2026-10-02
+album_005,user_added,ODYSSEY,RIIZE,2025,CD (1st Studio Album),10,"K-pop, dance-pop",25,28,2026-10-02
+album_006,user_added,eternal sunshine deluxe: brighter days ahead,Ariana Grande,2025,2LP Deluxe Edition,22,"pop, R&B",42,45,2026-10-02
+album_007,user_added,HELP EVER HURT NEVER,Fujii Kaze,2020,2LP,11,"J-pop, R&B, soul",40,65,2026-10-02
+album_008,user_added,First Love,Hikaru Utada,1999,2LP / CD,12,"J-pop, R&B",35,55,2026-10-02
+album_009,user_added,The Rise and Fall of a Midwest Princess,Chappell Roan,2023,2LP,14,"pop, synth-pop",40,42,2026-10-02
+album_010,library_recommendation,MAYHEM,Lady Gaga,2025,LP,14,"pop, dance-pop",40,40,2026-10-02

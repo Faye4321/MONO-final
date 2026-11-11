@@ -1,0 +1,455 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		932DBE813074D10700E5FAC0 /* HomeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932DBE803074D10300E5FAC0 /* HomeSupport.swift */; };
+		932DBE833074D11500E5FAC0 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932DBE823074D11300E5FAC0 /* HomeView.swift */; };
+		935164DC3087397200B193C6 /* SocialModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164DB3087396E00B193C6 /* SocialModels.swift */; };
+		935164DE30873A2300B193C6 /* SocialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164DD30873A1700B193C6 /* SocialStore.swift */; };
+		935164E030873B3500B193C6 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164DF30873B3100B193C6 /* FriendsView.swift */; };
+		935164E230873BCA00B193C6 /* FriendProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164E130873BC700B193C6 /* FriendProfileView.swift */; };
+		935164E430873EA000B193C6 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164E330873E9B00B193C6 /* ChatView.swift */; };
+		935164E83087408300B193C6 /* CreateSharedCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164E73087407F00B193C6 /* CreateSharedCollectionView.swift */; };
+		935164EA308742E300B193C6 /* SharedCollectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164E9308742DC00B193C6 /* SharedCollectionDetailView.swift */; };
+		93BE8B5030748F9F004C6AC6 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93BE8B4F30748F94004C6AC6 /* ProfileView.swift */; };
+		A10000000000000000000001 /* MonArchiveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* MonArchiveApp.swift */; };
+		A10000000000000000000002 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* AppTheme.swift */; };
+		A10000000000000000000003 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* Models.swift */; };
+		A10000000000000000000004 /* CollectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* CollectionStore.swift */; };
+		A10000000000000000000005 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* MockData.swift */; };
+		A10000000000000000000006 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* RootTabView.swift */; };
+		A10000000000000000000007 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* CollectionView.swift */; };
+		A10000000000000000000008 /* CollectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* CollectionCard.swift */; };
+		A10000000000000000000009 /* ShelfDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* ShelfDetailView.swift */; };
+		A1000000000000000000000A /* ArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* ArtworkView.swift */; };
+		A1000000000000000000000B /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ItemDetailView.swift */; };
+		A1000000000000000000000C /* CreateFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* CreateFlowView.swift */; };
+		A1000000000000000000000D /* SeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* SeedData.swift */; };
+		A1000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* Assets.xcassets */; };
+		A1000000000000000000001F /* ShopPicks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* ShopPicks.swift */; };
+		A10000000000000000000030 /* archive_bjd.wav in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* archive_bjd.wav */; };
+		A10000000000000000000031 /* archive_photocard.wav in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* archive_photocard.wav */; };
+		A10000000000000000000032 /* archive_poster.wav in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000032 /* archive_poster.wav */; };
+		A10000000000000000000033 /* archive_vinyl.wav in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000033 /* archive_vinyl.wav */; };
+		C10C68B349B5E90FA3E3CECA /* Memory.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10C68B349B5E90FA3E3CECA /* Memory.swift */; };
+		C10C7BAA670C2A567AD28E0F /* MomentEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10C7BAA670C2A567AD28E0F /* MomentEditorView.swift */; };
+		C12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift */; };
+		C15515E2CB7D10EEA0352EB8 /* LabImageServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15515E2CB7D10EEA0352EB8 /* LabImageServices.swift */; };
+		C15715BB4E5C542D6F7F25BF /* CSVImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15715BB4E5C542D6F7F25BF /* CSVImporter.swift */; };
+		C16E806CA484B33746C4F0ED /* MonoLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D16E806CA484B33746C4F0ED /* MonoLogoView.swift */; };
+		C1910E35FAD7C5A7A5C803DB /* JourneyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1910E35FAD7C5A7A5C803DB /* JourneyViews.swift */; };
+		C197EA10174CD9DC5E779EF4 /* MemoryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D197EA10174CD9DC5E779EF4 /* MemoryComponents.swift */; };
+		C19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */; };
+		C1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */; };
+		C1AE77B94C360E527F35200E /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1AE77B94C360E527F35200E /* ShareCard.swift */; };
+		C1B5385DDE273040919B61F6 /* ArchiveSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */; };
+		C1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */; };
+		C1CE4041509962369890D0F0 /* CollectionCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */; };
+		C1D43F1EDC96E150862C6B9B /* LabModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D43F1EDC96E150862C6B9B /* LabModels.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		932DBE803074D10300E5FAC0 /* HomeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupport.swift; sourceTree = "<group>"; };
+		932DBE823074D11300E5FAC0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		935164DB3087396E00B193C6 /* SocialModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialModels.swift; sourceTree = "<group>"; };
+		935164DD30873A1700B193C6 /* SocialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialStore.swift; sourceTree = "<group>"; };
+		935164DF30873B3100B193C6 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
+		935164E130873BC700B193C6 /* FriendProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendProfileView.swift; sourceTree = "<group>"; };
+		935164E330873E9B00B193C6 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		935164E73087407F00B193C6 /* CreateSharedCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSharedCollectionView.swift; sourceTree = "<group>"; };
+		935164E9308742DC00B193C6 /* SharedCollectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCollectionDetailView.swift; sourceTree = "<group>"; };
+		93BE8B4F30748F94004C6AC6 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		B10000000000000000000000 /* MonArchive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MonArchive.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000001 /* MonArchiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonArchiveApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* CollectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* CollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionView.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* CollectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionCard.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* ShelfDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfDetailView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* ArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* CreateFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlowView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* SeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedData.swift; sourceTree = "<group>"; };
+		B1000000000000000000000E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000000000000000000001F /* ShopPicks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopPicks.swift; sourceTree = "<group>"; };
+		B10000000000000000000030 /* archive_bjd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = archive_bjd.wav; sourceTree = "<group>"; };
+		B10000000000000000000031 /* archive_photocard.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = archive_photocard.wav; sourceTree = "<group>"; };
+		B10000000000000000000032 /* archive_poster.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = archive_poster.wav; sourceTree = "<group>"; };
+		B10000000000000000000033 /* archive_vinyl.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = archive_vinyl.wav; sourceTree = "<group>"; };
+		D10C68B349B5E90FA3E3CECA /* Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Memory.swift; sourceTree = "<group>"; };
+		D10C7BAA670C2A567AD28E0F /* MomentEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomentEditorView.swift; sourceTree = "<group>"; };
+		D12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		D15515E2CB7D10EEA0352EB8 /* LabImageServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabImageServices.swift; sourceTree = "<group>"; };
+		D15715BB4E5C542D6F7F25BF /* CSVImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImporter.swift; sourceTree = "<group>"; };
+		D16E806CA484B33746C4F0ED /* MonoLogoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonoLogoView.swift; sourceTree = "<group>"; };
+		D1910E35FAD7C5A7A5C803DB /* JourneyViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyViews.swift; sourceTree = "<group>"; };
+		D197EA10174CD9DC5E779EF4 /* MemoryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryComponents.swift; sourceTree = "<group>"; };
+		D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageStore.swift; sourceTree = "<group>"; };
+		D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabEditorViews.swift; sourceTree = "<group>"; };
+		D1AE77B94C360E527F35200E /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
+		D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveSearchView.swift; sourceTree = "<group>"; };
+		D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabFlowViews.swift; sourceTree = "<group>"; };
+		D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionCalendarView.swift; sourceTree = "<group>"; };
+		D1D43F1EDC96E150862C6B9B /* LabModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabModels.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C10000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D10000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000002 /* MonArchive */,
+				D10000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D10000000000000000000002 /* MonArchive */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000001 /* MonArchiveApp.swift */,
+				935164DF30873B3100B193C6 /* FriendsView.swift */,
+				935164E130873BC700B193C6 /* FriendProfileView.swift */,
+				935164E9308742DC00B193C6 /* SharedCollectionDetailView.swift */,
+				935164E73087407F00B193C6 /* CreateSharedCollectionView.swift */,
+				93BE8B4F30748F94004C6AC6 /* ProfileView.swift */,
+				935164E330873E9B00B193C6 /* ChatView.swift */,
+				935164DB3087396E00B193C6 /* SocialModels.swift */,
+				935164DD30873A1700B193C6 /* SocialStore.swift */,
+				B10000000000000000000002 /* AppTheme.swift */,
+				B10000000000000000000003 /* Models.swift */,
+				B10000000000000000000004 /* CollectionStore.swift */,
+				B1000000000000000000000D /* SeedData.swift */,
+				D12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift */,
+				D16E806CA484B33746C4F0ED /* MonoLogoView.swift */,
+				D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */,
+				D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */,
+				D15515E2CB7D10EEA0352EB8 /* LabImageServices.swift */,
+				D1D43F1EDC96E150862C6B9B /* LabModels.swift */,
+				D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */,
+				D1AE77B94C360E527F35200E /* ShareCard.swift */,
+				D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */,
+				D1910E35FAD7C5A7A5C803DB /* JourneyViews.swift */,
+				D15715BB4E5C542D6F7F25BF /* CSVImporter.swift */,
+				D10C7BAA670C2A567AD28E0F /* MomentEditorView.swift */,
+				D197EA10174CD9DC5E779EF4 /* MemoryComponents.swift */,
+				D10C68B349B5E90FA3E3CECA /* Memory.swift */,
+				D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */,
+				B1000000000000000000001F /* ShopPicks.swift */,
+				B10000000000000000000005 /* MockData.swift */,
+				B1000000000000000000000E /* Assets.xcassets */,
+				B10000000000000000000030 /* archive_bjd.wav */,
+				B10000000000000000000031 /* archive_photocard.wav */,
+				B10000000000000000000032 /* archive_poster.wav */,
+				B10000000000000000000033 /* archive_vinyl.wav */,
+				B10000000000000000000006 /* RootTabView.swift */,
+				932DBE803074D10300E5FAC0 /* HomeSupport.swift */,
+				932DBE823074D11300E5FAC0 /* HomeView.swift */,
+				B10000000000000000000007 /* CollectionView.swift */,
+				B10000000000000000000008 /* CollectionCard.swift */,
+				B10000000000000000000009 /* ShelfDetailView.swift */,
+				B1000000000000000000000A /* ArtworkView.swift */,
+				B1000000000000000000000B /* ItemDetailView.swift */,
+				B1000000000000000000000C /* CreateFlowView.swift */,
+			);
+			path = MonArchive;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000000 /* MonArchive.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E10000000000000000000001 /* MonArchive */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10000000000000000000002 /* Build configuration list for PBXNativeTarget "MonArchive" */;
+			buildPhases = (
+				C10000000000000000000002 /* Sources */,
+				C10000000000000000000001 /* Frameworks */,
+				C10000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MonArchive;
+			productName = MonArchive;
+			productReference = B10000000000000000000000 /* MonArchive.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E10000000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					E10000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = F10000000000000000000001 /* Build configuration list for PBXProject "MonArchive" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D10000000000000000000001;
+			productRefGroup = D10000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E10000000000000000000001 /* MonArchive */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C10000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000000E /* Assets.xcassets in Resources */,
+				A10000000000000000000030 /* archive_bjd.wav in Resources */,
+				A10000000000000000000031 /* archive_photocard.wav in Resources */,
+				A10000000000000000000032 /* archive_poster.wav in Resources */,
+				A10000000000000000000033 /* archive_vinyl.wav in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C10000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* MonArchiveApp.swift in Sources */,
+				93BE8B5030748F9F004C6AC6 /* ProfileView.swift in Sources */,
+				935164E230873BCA00B193C6 /* FriendProfileView.swift in Sources */,
+				935164E030873B3500B193C6 /* FriendsView.swift in Sources */,
+				935164E430873EA000B193C6 /* ChatView.swift in Sources */,
+				A10000000000000000000002 /* AppTheme.swift in Sources */,
+				932DBE833074D11500E5FAC0 /* HomeView.swift in Sources */,
+				935164DE30873A2300B193C6 /* SocialStore.swift in Sources */,
+				A10000000000000000000003 /* Models.swift in Sources */,
+				932DBE813074D10700E5FAC0 /* HomeSupport.swift in Sources */,
+				935164EA308742E300B193C6 /* SharedCollectionDetailView.swift in Sources */,
+				A10000000000000000000004 /* CollectionStore.swift in Sources */,
+				A1000000000000000000000D /* SeedData.swift in Sources */,
+				C12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift in Sources */,
+				C16E806CA484B33746C4F0ED /* MonoLogoView.swift in Sources */,
+				C1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift in Sources */,
+				C1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift in Sources */,
+				C15515E2CB7D10EEA0352EB8 /* LabImageServices.swift in Sources */,
+				C1D43F1EDC96E150862C6B9B /* LabModels.swift in Sources */,
+				C1CE4041509962369890D0F0 /* CollectionCalendarView.swift in Sources */,
+				C1AE77B94C360E527F35200E /* ShareCard.swift in Sources */,
+				C1B5385DDE273040919B61F6 /* ArchiveSearchView.swift in Sources */,
+				C1910E35FAD7C5A7A5C803DB /* JourneyViews.swift in Sources */,
+				C15715BB4E5C542D6F7F25BF /* CSVImporter.swift in Sources */,
+				C10C7BAA670C2A567AD28E0F /* MomentEditorView.swift in Sources */,
+				C197EA10174CD9DC5E779EF4 /* MemoryComponents.swift in Sources */,
+				C10C68B349B5E90FA3E3CECA /* Memory.swift in Sources */,
+				C19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift in Sources */,
+				A1000000000000000000001F /* ShopPicks.swift in Sources */,
+				A10000000000000000000005 /* MockData.swift in Sources */,
+				935164E83087408300B193C6 /* CreateSharedCollectionView.swift in Sources */,
+				935164DC3087397200B193C6 /* SocialModels.swift in Sources */,
+				A10000000000000000000006 /* RootTabView.swift in Sources */,
+				A10000000000000000000007 /* CollectionView.swift in Sources */,
+				A10000000000000000000008 /* CollectionCard.swift in Sources */,
+				A10000000000000000000009 /* ShelfDetailView.swift in Sources */,
+				A1000000000000000000000A /* ArtworkView.swift in Sources */,
+				A1000000000000000000000B /* ItemDetailView.swift in Sources */,
+				A1000000000000000000000C /* CreateFlowView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		110000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = MJRTN5HT57;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		110000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = MJRTN5HT57;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		110000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MONO saves your finished collages to your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yufei.monarchive5333;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		110000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MONO saves your finished collages to your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yufei.monarchive5333;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F10000000000000000000001 /* Build configuration list for PBXProject "MonArchive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				110000000000000000000001 /* Debug */,
+				110000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F10000000000000000000002 /* Build configuration list for PBXNativeTarget "MonArchive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				110000000000000000000003 /* Debug */,
+				110000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E10000000000000000000002 /* Project object */;
+}
