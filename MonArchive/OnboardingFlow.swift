@@ -35,11 +35,12 @@ enum CollectingPreferences {
 
 struct AppRootView: View {
     @AppStorage("mono.didCompleteOnboarding") private var didCompleteOnboarding = false
-    // Shared with the ME page, so the name entered at sign-up shows there.
-    @AppStorage("profile.name") private var profileName = "Shuning Xu"
     @State private var route: AppEntryRoute = .splash
     @State private var selectedTab: AppTab = .explore
     @State private var newMemberName = ""
+    /// Set from Settings ▸ Replay app tour.
+    @AppStorage(AppTourReplay.key) private var replayTourRequested = false
+    @State private var isReplayingTour = false
 
     var body: some View {
         ZStack {
@@ -64,7 +65,8 @@ struct AppRootView: View {
             case .signUp:
                 AuthenticationView(mode: .signUp, onBack: { transition(to: .welcome) }) { name in
                     newMemberName = name
-                    if !name.isEmpty { profileName = name }
+                    // Saves the name to the ME page and suggests a handle from it.
+                    Task { await ProfileStore.shared.applySignUp(name: name) }
                     transition(to: .setupWelcome)
                 }
             case .setupWelcome:
@@ -87,8 +89,8 @@ struct AppRootView: View {
             case .tour:
                 GuidedAppTourView(
                     selection: $selectedTab,
-                    onComplete: { transition(to: .allSet) },
-                    onSkip: { transition(to: .allSet) }
+                    onComplete: finishTour,
+                    onSkip: finishTour
                 )
             case .allSet:
                 AllSetView {
@@ -102,6 +104,24 @@ struct AppRootView: View {
             }
         }
         .tint(BrandColor.collectedRed)
+        .onChange(of: replayTourRequested) { _, requested in
+            guard requested else { return }
+            replayTourRequested = false
+            isReplayingTour = true
+            transition(to: .tour)
+        }
+    }
+
+    /// A replayed tour goes straight back into the app; the first one
+    /// continues to the "You're all set" page.
+    private func finishTour() {
+        if isReplayingTour {
+            isReplayingTour = false
+            selectedTab = .me
+            transition(to: .app)
+        } else {
+            transition(to: .allSet)
+        }
     }
 
     private func transition(to next: AppEntryRoute) {
@@ -680,12 +700,24 @@ private struct AllSetView: View {
 
 // MARK: - Guided Tour
 
+enum AppTourReplay {
+    static let key = "mono.replayTourRequested"
+}
+
 private struct FeatureTourItem: Identifiable {
     let id = UUID()
     let tab: AppTab
     let eyebrow: String
     let title: String
     let body: String
+    var tip: TourTip? = nil
+}
+
+/// A small how-to shown under a tour step, e.g. how to delete an object.
+private struct TourTip {
+    let systemImage: String
+    let title: String
+    let text: String
 }
 
 private struct GuidedAppTourView: View {
@@ -698,7 +730,17 @@ private struct GuidedAppTourView: View {
 
     private let items = [
         FeatureTourItem(tab: .explore, eyebrow: "01 · EXPLORE", title: "Start with what feels relevant.", body: "Discover picks worth adding, and revisit your collection journey month by month."),
-        FeatureTourItem(tab: .collection, eyebrow: "02 · COLLECTION", title: "Everything you keep, organized.", body: "Every object in your archive, on its own shelf."),
+        FeatureTourItem(
+            tab: .collection,
+            eyebrow: "02 · COLLECTION",
+            title: "Everything you keep, organized.",
+            body: "Every object in your archive, on its own shelf.",
+            tip: TourTip(
+                systemImage: "hand.point.up.left",
+                title: "TO DELETE AN OBJECT",
+                text: "Open its shelf, press and hold the object, then tap Delete Item. Its memories are deleted too."
+            )
+        ),
         FeatureTourItem(tab: .create, eyebrow: "03 · CREATE", title: "Add the next object.", body: "Photograph, edit, and record the details and memories that make each piece yours."),
         FeatureTourItem(tab: .lab, eyebrow: "04 · LAB", title: "Turn objects into compositions.", body: "Cut out pieces from your archive and arrange them into shareable journal-like collages."),
         FeatureTourItem(tab: .me, eyebrow: "05 · ME", title: "Your collection, your story.", body: "See what you've gathered, where it came from, and the journey behind it.")
@@ -770,6 +812,27 @@ private struct GuidedAppTourView: View {
                         .monoBody(14)
                         .foregroundStyle(BrandColor.catalogGray)
                         .lineSpacing(3)
+                    if let tip = items[page].tip {
+                        HStack(alignment: .top, spacing: 11) {
+                            Image(systemName: tip.systemImage)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(BrandColor.collectedRed)
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(tip.title)
+                                    .monoLabel(9, tracking: 1.0)
+                                    .foregroundStyle(BrandColor.collectedRed)
+                                Text(tip.text)
+                                    .monoBody(13)
+                                    .foregroundStyle(BrandColor.inkBlack)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityElement(children: .combine)
+                    }
                     HStack(spacing: 7) {
                         Image(systemName: "hand.tap")
                         Text("TAP THE HIGHLIGHTED TAB")
@@ -785,7 +848,10 @@ private struct GuidedAppTourView: View {
                 }
                 .shadow(color: Color.black.opacity(0.18), radius: 28, y: 12)
                 .padding(.horizontal, 22)
-                .position(x: width / 2, y: max(200, proxy.size.height - 250))
+                // Pinned just above the highlighted tab, so a taller step
+                // (like the delete tip) never covers it on small iPhones.
+                .frame(width: width, height: max(barTop - 46, 0), alignment: .bottom)
+                .position(x: width / 2, y: max(barTop - 46, 0) / 2)
 
                 Button {
                     Haptics.selection()

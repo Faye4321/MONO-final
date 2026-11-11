@@ -20,7 +20,7 @@ struct RootTabView: View {
             }
             .tag(AppTab.explore)
 
-            CollectionView()
+            CollectionView(onProfileTapped: { selection = .me })
                 .tabItem { Label("COLLECTION", systemImage: "rectangle.stack") }
                 .tag(AppTab.collection)
 
