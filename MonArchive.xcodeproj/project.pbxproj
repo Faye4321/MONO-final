@@ -47,6 +47,7 @@
 		C19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */; };
 		C1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */; };
 		C1AE77B94C360E527F35200E /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1AE77B94C360E527F35200E /* ShareCard.swift */; };
+		C1AE77B94C360E527F35AA01 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1AE77B94C360E527F35AA01 /* ProfileService.swift */; };
 		C1B5385DDE273040919B61F6 /* ArchiveSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */; };
 		C1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */; };
 		C1CE4041509962369890D0F0 /* CollectionCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */; };
@@ -95,6 +96,7 @@
 		D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageStore.swift; sourceTree = "<group>"; };
 		D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabEditorViews.swift; sourceTree = "<group>"; };
 		D1AE77B94C360E527F35200E /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
+		D1AE77B94C360E527F35AA01 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
 		D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveSearchView.swift; sourceTree = "<group>"; };
 		D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabFlowViews.swift; sourceTree = "<group>"; };
 		D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionCalendarView.swift; sourceTree = "<group>"; };
@@ -144,6 +146,7 @@
 				D1D43F1EDC96E150862C6B9B /* LabModels.swift */,
 				D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */,
 				D1AE77B94C360E527F35200E /* ShareCard.swift */,
+				D1AE77B94C360E527F35AA01 /* ProfileService.swift */,
 				D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */,
 				D1910E35FAD7C5A7A5C803DB /* JourneyViews.swift */,
 				D15715BB4E5C542D6F7F25BF /* CSVImporter.swift */,
@@ -273,6 +276,7 @@
 				C1D43F1EDC96E150862C6B9B /* LabModels.swift in Sources */,
 				C1CE4041509962369890D0F0 /* CollectionCalendarView.swift in Sources */,
 				C1AE77B94C360E527F35200E /* ShareCard.swift in Sources */,
+				C1AE77B94C360E527F35AA01 /* ProfileService.swift in Sources */,
 				C1B5385DDE273040919B61F6 /* ArchiveSearchView.swift in Sources */,
 				C1910E35FAD7C5A7A5C803DB /* JourneyViews.swift in Sources */,
 				C15715BB4E5C542D6F7F25BF /* CSVImporter.swift in Sources */,
