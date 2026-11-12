@@ -826,6 +826,8 @@ private struct ProfileSettingsView: View {
             Button("OK", role: .cancel) {}
         } message: { Text(signOutError ?? "") }
         .scrollContentBackground(.hidden)
+        // Room for the floating tab bar, so the last row (Sign out) clears it.
+        .contentMargins(.bottom, MonoTabBar.height + 28, for: .scrollContent)
         .background(ArchiveTheme.ivory.ignoresSafeArea())
         .tint(ArchiveTheme.ink)
         .navigationTitle("SETTINGS")
