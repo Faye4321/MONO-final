@@ -32,12 +32,8 @@ struct CreateSharedCollectionView: View {
     }
 
     private var canCreate: Bool {
-        collectionName
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            .isEmpty == false &&
-        selectedFriendIDs.isEmpty == false
+        let name = collectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && name.count <= 150 && !socialStore.cloudBusy
     }
 
     var body: some View {
@@ -48,7 +44,10 @@ struct CreateSharedCollectionView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     nameSection
-                    friendsSection
+                    Text("Create your collection, then use Share Invitation to invite friends. They join using their own account.")
+                        .font(ArchiveTheme.body(13))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .padding(.vertical, 20)
                     permissionSection
                     objectsSection
                 }

@@ -1,8 +1,15 @@
 import SwiftUI
+import FirebaseAuth
+import FirebaseFirestore
+import CryptoKit
+import UIKit
 
 @MainActor
 final class SocialStore: ObservableObject {
-    let currentUserID = DemoSocialIDs.currentUser
+    var currentUserID: UUID {
+        guard cloudStarted, let uid = Auth.auth().currentUser?.uid else { return DemoSocialIDs.currentUser }
+        return Self.socialID(uid)
+    }
 
     @Published var friends: [SocialUser]
     @Published var friendRequests: [FriendRequest]
@@ -81,9 +88,9 @@ final class SocialStore: ObservableObject {
         let weekendRecordHunt = SharedCollection(
             id: DemoSocialIDs.weekendCollection,
             name: "Weekend Record Hunt",
-            ownerID: currentUserID,
+            ownerID: DemoSocialIDs.currentUser,
             memberIDs: [
-                currentUserID,
+                DemoSocialIDs.currentUser,
                 mina.id,
                 alex.id
             ],
@@ -100,7 +107,7 @@ final class SocialStore: ObservableObject {
             kind: .direct,
             title: "Mina",
             participantIDs: [
-                currentUserID,
+                DemoSocialIDs.currentUser,
                 mina.id
             ]
         )
@@ -129,7 +136,7 @@ final class SocialStore: ObservableObject {
             ChatMessage(
                 id: DemoSocialIDs.messageTwo,
                 conversationID: directConversation.id,
-                senderID: currentUserID,
+                senderID: DemoSocialIDs.currentUser,
                 body: "Yes! The cover fits the shelf perfectly.",
                 sentAt: Date().addingTimeInterval(-3_300)
             ),
@@ -148,6 +155,184 @@ final class SocialStore: ObservableObject {
                 sentAt: Date().addingTimeInterval(-1_200)
             )
         ]
+    }
+
+    @Published var cloudError: String?
+    @Published private(set) var cloudItems: [UUID: [CollectibleItem]] = [:]
+    @Published private(set) var cloudBusy = false
+    private var cloudStarted = false
+    private var cloudUID: String?
+    private weak var personalStore: CollectionStore?
+    private var authHandle: AuthStateDidChangeListenerHandle?
+    private var collectionsListener: ListenerRegistration?
+    private var sharedItemListeners: [UUID: ListenerRegistration] = [:]
+    private var metadata: [UUID: [String: Any]] = [:]
+
+    private static func socialID(_ uid: String) -> UUID {
+        let bytes = Array(SHA256.hash(data: Data(uid.utf8)).prefix(16))
+        return UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],
+                           bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15]))
+    }
+
+    func startCloud(collectionStore: CollectionStore) {
+        guard !cloudStarted else { return }
+        cloudStarted = true
+        personalStore = collectionStore
+        authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            let uid = user?.uid
+            Task { @MainActor in self?.observeSharedCollections(uid: uid) }
+        }
+    }
+
+    private func observeSharedCollections(uid: String?) {
+        collectionsListener?.remove()
+        sharedItemListeners.values.forEach { $0.remove() }
+        sharedItemListeners = [:]; metadata = [:]; cloudItems = [:]
+        cloudUID = uid
+        sharedCollections = []; friends = []; friendRequests = []
+        conversations = []; messages = []; cloudError = nil; cloudBusy = false
+        guard let uid else { return }
+        collectionsListener = Firestore.firestore().collection("sharedCollections")
+            .whereField("memberUIDs", arrayContains: uid)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self, self.cloudUID == uid else { return }
+                    if let error { self.cloudError = error.localizedDescription; return }
+                    guard let snapshot else { return }
+                    var result: [SharedCollection] = []
+                    var members: [UUID: SocialUser] = [:]
+                    for doc in snapshot.documents {
+                        let data = doc.data()
+                        guard let id = UUID(uuidString: doc.documentID),
+                              let owner = data["ownerUID"] as? String,
+                              let memberUIDs = data["memberUIDs"] as? [String] else { continue }
+                        self.metadata[id] = data
+                        let names = data["memberNames"] as? [String: String] ?? [:]
+                        for memberUID in memberUIDs where memberUID != uid {
+                            let socialID = Self.socialID(memberUID)
+                            members[socialID] = SocialUser(id: socialID, name: names[memberUID] ?? "Collector",
+                                handle: "", location: "", bio: "", interests: [], objectCount: 0,
+                                collectionCount: 0, sharedCollectionCount: 0,
+                                avatarColorA: "D5B99C", avatarColorB: "706B63")
+                        }
+                        result.append(SharedCollection(id: id, name: data["name"] as? String ?? "Shared collection",
+                            ownerID: Self.socialID(owner), memberIDs: memberUIDs.map(Self.socialID),
+                            itemIDs: (data["itemIDs"] as? [String] ?? []).compactMap(UUID.init(uuidString:)),
+                            permission: SharedPermission(rawValue: data["permission"] as? String ?? "ownerOnly") ?? .ownerOnly,
+                            createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? .now,
+                            updatedAt: (data["updatedAt"] as? Timestamp)?.dateValue() ?? .now))
+                        self.observeSharedItems(id, uid: uid)
+                    }
+                    let ids = Set(result.map(\.id))
+                    for id in Array(self.sharedItemListeners.keys) where !ids.contains(id) {
+                        self.sharedItemListeners.removeValue(forKey: id)?.remove()
+                        self.cloudItems.removeValue(forKey: id)
+                        self.metadata.removeValue(forKey: id)
+                    }
+                    self.sharedCollections = result.sorted { $0.updatedAt > $1.updatedAt }
+                    self.friends = Array(members.values).sorted { $0.name < $1.name }
+                }
+            }
+    }
+
+    private func observeSharedItems(_ id: UUID, uid: String) {
+        guard sharedItemListeners[id] == nil else { return }
+        sharedItemListeners[id] = Firestore.firestore().collection("sharedCollections")
+            .document(id.uuidString).collection("items").addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self, self.cloudUID == uid else { return }
+                    if let error { self.cloudError = error.localizedDescription; return }
+                    guard let snapshot else { return }
+                    self.cloudItems[id] = snapshot.documents.compactMap { doc -> CollectibleItem? in
+                        guard let payload = doc.data()["payload"] as? String,
+                              let bytes = payload.data(using: .utf8),
+                              var item = try? JSONDecoder().decode(CollectibleItem.self, from: bytes) else { return nil }
+                        item.imageFileName = nil
+                        item.imageData = doc.data()["preview"] as? Data
+                        return item
+                    }.sorted { $0.title < $1.title }
+                }
+            }
+    }
+
+    private func createCloudCollection(name: String, itemIDs: [UUID], permission: SharedPermission) -> SharedCollection {
+        let collection = SharedCollection(name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Shared collection" : name,
+            ownerID: currentUserID, memberIDs: [currentUserID], itemIDs: [], permission: permission)
+        guard let uid = cloudUID else { cloudError = "Please sign in first."; return collection }
+        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let label = Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector"
+        let data: [String: Any] = ["name": collection.name, "ownerUID": uid, "memberUIDs": [uid],
+            "memberNames": [uid: label], "itemIDs": [String](), "permission": permission.rawValue,
+            "inviteToken": token, "createdAt": FieldValue.serverTimestamp(), "updatedAt": FieldValue.serverTimestamp()]
+        cloudBusy = true
+        Task { @MainActor in
+            defer { if self.cloudUID == uid { self.cloudBusy = false } }
+            do {
+                let db = Firestore.firestore()
+                let batch = db.batch()
+                batch.setData(data, forDocument: db.collection("sharedCollections").document(collection.id.uuidString))
+                batch.setData(["collectionID": collection.id.uuidString, "ownerUID": uid], forDocument: db.collection("invites").document(token))
+                try await batch.commit()
+                guard self.cloudUID == uid else { return }
+                self.metadata[collection.id] = data
+                for itemID in itemIDs { await self.publishSharedItem(itemID, collectionID: collection.id) }
+            } catch { if self.cloudUID == uid { self.cloudError = error.localizedDescription } }
+        }
+        return collection
+    }
+
+    func invitation(for id: UUID) -> String? {
+        guard let token = metadata[id]?["inviteToken"] as? String else { return nil }
+        return "mono://collection?invite=" + token
+    }
+
+    func joinCollection(invitation: String) async throws {
+        guard let uid = Auth.auth().currentUser?.uid else { throw CollectionStore.CloudFailure.message("Sign in first, then paste the invitation again.") }
+        let input = invitation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = URLComponents(string: input)?.queryItems?.first(where: { $0.name == "invite" })?.value ?? input
+        guard token.count == 64, token.allSatisfy({ $0.isHexDigit }) else {
+            throw CollectionStore.CloudFailure.message("Paste a valid MONO invitation link or code.")
+        }
+        let db = Firestore.firestore()
+        let invite = try await db.collection("invites").document(token).getDocument()
+        guard let collectionID = invite.data()?["collectionID"] as? String else {
+            throw CollectionStore.CloudFailure.message("This invitation is unavailable.")
+        }
+        guard cloudUID == uid else { throw CancellationError() }
+        let label = Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector"
+        try await db.collection("sharedCollections").document(collectionID).updateData([
+            "memberUIDs": FieldValue.arrayUnion([uid]),
+            "joinProof": token,
+            "memberNames." + uid: label
+        ])
+    }
+
+    private func publishSharedItem(_ id: UUID, collectionID: UUID) async {
+        guard let uid = cloudUID, var item = personalStore?.item(id: id) else { return }
+        do {
+            // Shared copies have a bounded preview; never grant access to the owner's private bucket.
+            let source = item.uploadedImage ?? item.imageName.flatMap { UIImage(named: $0) }
+            var preview: Data?
+            if let source {
+                let scale = min(1, 600 / max(source.size.width, source.size.height))
+                let size = CGSize(width: max(1, source.size.width * scale), height: max(1, source.size.height * scale))
+                let resized = UIGraphicsImageRenderer(size: size).image { _ in source.draw(in: CGRect(origin: .zero, size: size)) }
+                preview = resized.jpegData(compressionQuality: 0.5)
+                if (preview?.count ?? 0) > 180_000 { preview = resized.jpegData(compressionQuality: 0.15) }
+                guard (preview?.count ?? 0) <= 180_000 else { throw CollectionStore.CloudFailure.message("Shared image preview is too large.") }
+            }
+            item.imageFileName = nil; item.imageData = nil
+            let payload = String(decoding: try JSONEncoder().encode(item), as: UTF8.self)
+            guard payload.utf8.count < 400_000 else { throw CollectionStore.CloudFailure.message("Object text is too large to share.") }
+            var data: [String: Any] = ["payload": payload, "uploaderUID": uid, "updatedAt": FieldValue.serverTimestamp()]
+            if let preview { data["preview"] = preview }
+            guard cloudUID == uid else { throw CancellationError() }
+            let root = Firestore.firestore().collection("sharedCollections").document(collectionID.uuidString)
+            let batch = Firestore.firestore().batch()
+            batch.setData(data, forDocument: root.collection("items").document(id.uuidString))
+            batch.updateData(["itemIDs": FieldValue.arrayUnion([id.uuidString]), "updatedAt": FieldValue.serverTimestamp()], forDocument: root)
+            try await batch.commit()
+        } catch { if cloudUID == uid { cloudError = error.localizedDescription } }
     }
 
     // MARK: - Users
@@ -194,6 +379,9 @@ final class SocialStore: ObservableObject {
         itemIDs: [UUID],
         permission: SharedPermission
     ) -> SharedCollection {
+        if cloudStarted {
+            return createCloudCollection(name: name, itemIDs: itemIDs, permission: permission)
+        }
         let trimmedName = name.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -228,6 +416,10 @@ final class SocialStore: ObservableObject {
         _ itemID: UUID,
         to collectionID: UUID
     ) {
+        if cloudStarted {
+            Task { await publishSharedItem(itemID, collectionID: collectionID) }
+            return
+        }
         guard let index = sharedCollections.firstIndex(
             where: { $0.id == collectionID }
         ) else {
@@ -247,6 +439,7 @@ final class SocialStore: ObservableObject {
     func seedSharedCollectionItems(
         from items: [CollectibleItem]
     ) {
+        guard !cloudStarted else { return }
         guard let index = sharedCollections.firstIndex(
             where: {
                 $0.id == DemoSocialIDs.weekendCollection

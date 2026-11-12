@@ -1,14 +1,33 @@
 import ImageIO
 import UIKit
+import CryptoKit
 
 // Photos are stored as files under Documents/Images; JSON keeps only file names.
 enum ImageStore {
-    static let directory: URL = {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let folder = documents.appendingPathComponent("Images", isDirectory: true)
+    private static var scope: String?
+    private static var legacyDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Images", isDirectory: true)
+    }
+
+    static var directory: URL {
+        let folder = scope.map { legacyDirectory.appendingPathComponent("Accounts/" + $0, isDirectory: true) } ?? legacyDirectory
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
-    }()
+    }
+
+    static func switchAccount(to uid: String?) {
+        scope = uid.map { SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() }
+        cache.removeAllObjects()
+        thumbnailCache.removeAllObjects()
+    }
+
+    static func importLegacy(named name: String) throws {
+        let destination = url(for: name)
+        guard !FileManager.default.fileExists(atPath: destination.path) else { return }
+        let source = legacyDirectory.appendingPathComponent(name)
+        try FileManager.default.copyItem(at: source, to: destination)
+    }
 
     private static let cache = NSCache<NSString, UIImage>()
     private static let thumbnailCache = NSCache<NSString, UIImage>()

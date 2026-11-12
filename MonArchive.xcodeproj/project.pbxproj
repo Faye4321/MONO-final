@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		67F2AEBA30A3F60C009E1476 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 67F2AEB930A3F60C009E1476 /* GoogleService-Info.plist */; };
+		67F2AEBE30A3F79D009E1476 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 67F2AEBD30A3F79D009E1476 /* FirebaseAuth */; };
+		67F2AEC030A3F7A9009E1476 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 67F2AEBF30A3F7A9009E1476 /* FirebaseFirestore */; };
+		67F2AEC230A3F7B5009E1476 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 67F2AEC130A3F7B5009E1476 /* FirebaseStorage */; };
+		67F2AEC530A3FFAF009E1476 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 67F2AEC430A3FFAF009E1476 /* Supabase */; };
+		67F2AEC730A40155009E1476 /* CloudStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F2AEC630A40155009E1476 /* CloudStorage.swift */; };
+		67F2AEC930A55E29009E1476 /* CloudConnectionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F2AEC830A55E29009E1476 /* CloudConnectionCheck.swift */; };
 		932DBE813074D10700E5FAC0 /* HomeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932DBE803074D10300E5FAC0 /* HomeSupport.swift */; };
 		932DBE833074D11500E5FAC0 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932DBE823074D11300E5FAC0 /* HomeView.swift */; };
 		935164DC3087397200B193C6 /* SocialModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935164DB3087396E00B193C6 /* SocialModels.swift */; };
@@ -54,6 +61,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		67F2AEB930A3F60C009E1476 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		67F2AEC630A40155009E1476 /* CloudStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStorage.swift; sourceTree = "<group>"; };
+		67F2AEC830A55E29009E1476 /* CloudConnectionCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudConnectionCheck.swift; sourceTree = "<group>"; };
 		932DBE803074D10300E5FAC0 /* HomeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupport.swift; sourceTree = "<group>"; };
 		932DBE823074D11300E5FAC0 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		935164DB3087396E00B193C6 /* SocialModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialModels.swift; sourceTree = "<group>"; };
@@ -106,16 +116,28 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				67F2AEC530A3FFAF009E1476 /* Supabase in Frameworks */,
+				67F2AEBE30A3F79D009E1476 /* FirebaseAuth in Frameworks */,
+				67F2AEC030A3F7A9009E1476 /* FirebaseFirestore in Frameworks */,
+				67F2AEC230A3F7B5009E1476 /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		67F2AEBC30A3F79D009E1476 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		D10000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
 				D10000000000000000000002 /* MonArchive */,
+				67F2AEBC30A3F79D009E1476 /* Frameworks */,
 				D10000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -137,6 +159,7 @@
 				B10000000000000000000004 /* CollectionStore.swift */,
 				B1000000000000000000000D /* SeedData.swift */,
 				D12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift */,
+				67F2AEB930A3F60C009E1476 /* GoogleService-Info.plist */,
 				D16E806CA484B33746C4F0ED /* MonoLogoView.swift */,
 				D1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift */,
 				D1CB15D5D6E8BDD509BF673C /* LabFlowViews.swift */,
@@ -144,6 +167,7 @@
 				D1D43F1EDC96E150862C6B9B /* LabModels.swift */,
 				D1CE4041509962369890D0F0 /* CollectionCalendarView.swift */,
 				D1AE77B94C360E527F35200E /* ShareCard.swift */,
+				67F2AEC830A55E29009E1476 /* CloudConnectionCheck.swift */,
 				D1B5385DDE273040919B61F6 /* ArchiveSearchView.swift */,
 				D1910E35FAD7C5A7A5C803DB /* JourneyViews.swift */,
 				D15715BB4E5C542D6F7F25BF /* CSVImporter.swift */,
@@ -167,6 +191,7 @@
 				B1000000000000000000000A /* ArtworkView.swift */,
 				B1000000000000000000000B /* ItemDetailView.swift */,
 				B1000000000000000000000C /* CreateFlowView.swift */,
+				67F2AEC630A40155009E1476 /* CloudStorage.swift */,
 			);
 			path = MonArchive;
 			sourceTree = "<group>";
@@ -195,6 +220,12 @@
 			dependencies = (
 			);
 			name = MonArchive;
+			packageProductDependencies = (
+				67F2AEBD30A3F79D009E1476 /* FirebaseAuth */,
+				67F2AEBF30A3F7A9009E1476 /* FirebaseFirestore */,
+				67F2AEC130A3F7B5009E1476 /* FirebaseStorage */,
+				67F2AEC430A3FFAF009E1476 /* Supabase */,
+			);
 			productName = MonArchive;
 			productReference = B10000000000000000000000 /* MonArchive.app */;
 			productType = "com.apple.product-type.application";
@@ -207,7 +238,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 2700;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					E10000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
@@ -223,6 +254,10 @@
 				Base,
 			);
 			mainGroup = D10000000000000000000001;
+			packageReferences = (
+				67F2AEBB30A3F6C5009E1476 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				67F2AEC330A3FF36009E1476 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			productRefGroup = D10000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -242,6 +277,7 @@
 				A10000000000000000000031 /* archive_photocard.wav in Resources */,
 				A10000000000000000000032 /* archive_poster.wav in Resources */,
 				A10000000000000000000033 /* archive_vinyl.wav in Resources */,
+				67F2AEBA30A3F60C009E1476 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +293,7 @@
 				935164E230873BCA00B193C6 /* FriendProfileView.swift in Sources */,
 				935164E030873B3500B193C6 /* FriendsView.swift in Sources */,
 				935164E430873EA000B193C6 /* ChatView.swift in Sources */,
+				67F2AEC930A55E29009E1476 /* CloudConnectionCheck.swift in Sources */,
 				A10000000000000000000002 /* AppTheme.swift in Sources */,
 				932DBE833074D11500E5FAC0 /* HomeView.swift in Sources */,
 				935164DE30873A2300B193C6 /* SocialStore.swift in Sources */,
@@ -277,6 +314,7 @@
 				C1910E35FAD7C5A7A5C803DB /* JourneyViews.swift in Sources */,
 				C15715BB4E5C542D6F7F25BF /* CSVImporter.swift in Sources */,
 				C10C7BAA670C2A567AD28E0F /* MomentEditorView.swift in Sources */,
+				67F2AEC730A40155009E1476 /* CloudStorage.swift in Sources */,
 				C197EA10174CD9DC5E779EF4 /* MemoryComponents.swift in Sources */,
 				C10C68B349B5E90FA3E3CECA /* Memory.swift in Sources */,
 				C19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift in Sources */,
@@ -391,6 +429,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MonArchive/Info.plist;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MONO saves your finished collages to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -413,6 +452,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MonArchive/Info.plist;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "MONO saves your finished collages to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -450,6 +490,48 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		67F2AEBB30A3F6C5009E1476 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.1.1;
+			};
+		};
+		67F2AEC330A3FF36009E1476 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		67F2AEBD30A3F79D009E1476 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 67F2AEBB30A3F6C5009E1476 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		67F2AEBF30A3F7A9009E1476 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 67F2AEBB30A3F6C5009E1476 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		67F2AEC130A3F7B5009E1476 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 67F2AEBB30A3F6C5009E1476 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		67F2AEC430A3FFAF009E1476 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 67F2AEC330A3FF36009E1476 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E10000000000000000000002 /* Project object */;
 }

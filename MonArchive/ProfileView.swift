@@ -9,23 +9,12 @@ struct ProfileView: View {
 
     @EnvironmentObject private var socialStore: SocialStore
 
-    @AppStorage("profile.name")
+    @EnvironmentObject private var profileStore: CloudProfileStore
 
-    private var profileName = "Shuning Xu"
-
-    @AppStorage("profile.handle")
-
-    private var profileHandle = "@shuningcollects"
-
-    @AppStorage("profile.location")
-
-    private var profileLocation = "Los Angeles"
-
-    @AppStorage("profile.bio")
-
-    private var profileBio =
-
-        "Collecting vinyl, movie posters, and objects worth keeping."
+    private var profileName: String { profileStore.profile.name }
+    private var profileHandle: String { profileStore.profile.handle }
+    private var profileLocation: String { profileStore.profile.location }
+    private var profileBio: String { profileStore.profile.bio }
 
     @State private var showingEditProfile = false
     @State private var importingCSV = false
@@ -80,6 +69,7 @@ struct ProfileView: View {
                         topBar
 
                         profileCard
+                        CloudAccountPanel()
                         socialActionSection
                         sharedCollectionsSection
                         friendsCollectionsSection
@@ -117,17 +107,7 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showingEditProfile) {
 
-                EditProfileView(
-
-                    name: $profileName,
-
-                    handle: $profileHandle,
-
-                    location: $profileLocation,
-
-                    bio: $profileBio
-
-                )
+                EditProfileView(profile: profileStore.profile)
 
             }
             .onAppear {
@@ -188,6 +168,7 @@ struct ProfileView: View {
 
             .buttonStyle(.plain)
 
+            .disabled(!profileStore.isReady)
             .accessibilityLabel("Edit profile")
 
         }
@@ -623,7 +604,7 @@ struct ProfileView: View {
 
                 Text(
 
-                    "\(collection.memberIDs.count + 1) MEMBERS · \(collection.itemIDs.count) OBJECTS"
+                    "\(collection.memberIDs.count) MEMBERS · \(collection.itemIDs.count) OBJECTS"
 
                 )
 
@@ -985,16 +966,21 @@ private struct ProfileStat: View {
 // MARK: - Edit Profile
 
 private struct EditProfileView: View {
-
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var profileStore: CloudProfileStore
+    @State private var name: String
+    @State private var handle: String
+    @State private var location: String
+    @State private var bio: String
+    @State private var saveError: String?
+    @State private var saving = false
 
-    @Binding var name: String
-
-    @Binding var handle: String
-
-    @Binding var location: String
-
-    @Binding var bio: String
+    init(profile: CloudUserProfile) {
+        _name = State(initialValue: profile.name)
+        _handle = State(initialValue: profile.handle)
+        _location = State(initialValue: profile.location)
+        _bio = State(initialValue: profile.bio)
+    }
 
     var body: some View {
 
@@ -1009,6 +995,10 @@ private struct EditProfileView: View {
                 ScrollView {
 
                     VStack(spacing: 18) {
+                        if let saveError {
+                            Text(saveError).font(ArchiveTheme.body(13))
+                                .foregroundStyle(ArchiveTheme.collectedRed)
+                        }
 
                         EditProfileField(
 
@@ -1094,11 +1084,21 @@ private struct EditProfileView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
 
-                    Button("SAVE") {
-
-                        dismiss()
-
+                    Button(saving ? "SAVING…" : "SAVE") {
+                        saving = true
+                        saveError = nil
+                        let value = CloudUserProfile(name: name, handle: handle, location: location, bio: bio)
+                        Task { @MainActor in
+                            defer { saving = false }
+                            do {
+                                try await profileStore.save(value)
+                                dismiss()
+                            } catch {
+                                saveError = profileStore.errorMessage ?? error.localizedDescription
+                            }
+                        }
                     }
+                    .disabled(saving || !profileStore.isReady || profileStore.isSaving)
 
                     .font(ArchiveTheme.label(13))
 
@@ -1110,6 +1110,7 @@ private struct EditProfileView: View {
 
         }
 
+        .interactiveDismissDisabled(saving)
         .presentationDetents([.medium, .large])
 
     }
@@ -1161,6 +1162,7 @@ private struct EditProfileField: View {
         .environmentObject(CollectionStore())
 
         .environmentObject(SocialStore())
+        .environmentObject(CloudProfileStore())
 
 }
 

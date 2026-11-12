@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 // Onboarding contributed by Crystal: splash, welcome, sign-in, required first
 // object and guided tour. Adapted to use the app's tab bar and Create flow.
@@ -34,9 +35,12 @@ enum CollectingPreferences {
 }
 
 struct AppRootView: View {
+    @EnvironmentObject private var store: CollectionStore
+    @EnvironmentObject private var socialStore: SocialStore
+    @EnvironmentObject private var profileStore: CloudProfileStore
+    @State private var invitationMessage: String?
+    @State private var pendingInvitation: String?
     @AppStorage("mono.didCompleteOnboarding") private var didCompleteOnboarding = false
-    // Shared with the ME page, so the name entered at sign-up shows there.
-    @AppStorage("profile.name") private var profileName = "Shuning Xu"
     @State private var route: AppEntryRoute = .splash
     @State private var selectedTab: AppTab = .explore
     @State private var newMemberName = ""
@@ -48,7 +52,7 @@ struct AppRootView: View {
             switch route {
             case .splash:
                 MonoSplashView {
-                    transition(to: didCompleteOnboarding ? .app : .welcome)
+                    transition(to: Auth.auth().currentUser == nil ? .welcome : .app)
                 }
             case .welcome:
                 WelcomeView(
@@ -57,14 +61,13 @@ struct AppRootView: View {
                 )
             case .login:
                 AuthenticationView(mode: .login, onBack: { transition(to: .welcome) }) { _ in
-                    // Replace this closure with the team's authentication service.
                     didCompleteOnboarding = true
                     transition(to: .app)
                 }
             case .signUp:
                 AuthenticationView(mode: .signUp, onBack: { transition(to: .welcome) }) { name in
                     newMemberName = name
-                    if !name.isEmpty { profileName = name }
+                    if !name.isEmpty { profileStore.registerName(name) }
                     transition(to: .setupWelcome)
                 }
             case .setupWelcome:
@@ -102,6 +105,49 @@ struct AppRootView: View {
             }
         }
         .tint(BrandColor.collectedRed)
+        .disabled(store.accountUID != nil && !store.cloudReady)
+        .overlay {
+            if store.accountUID != nil && !store.cloudReady {
+                VStack(spacing: 12) {
+                    ProgressView("Loading your collection…")
+                    if let error = store.cloudError {
+                        Text(error).font(.caption)
+                        Button("Sign out") { try? Auth.auth().signOut() }
+                    }
+                }
+                .padding(24)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .onChange(of: store.accountUID) { _, uid in
+            if uid == nil { transition(to: .welcome) }
+            else if let invitation = pendingInvitation {
+                pendingInvitation = nil
+                acceptInvitation(invitation)
+            }
+        }
+        .onOpenURL { url in
+            guard url.scheme == "mono", url.host == "collection" else { return }
+            if Auth.auth().currentUser == nil {
+                pendingInvitation = url.absoluteString
+                invitationMessage = "Sign in to accept this collection invitation."
+                transition(to: .login)
+            } else { acceptInvitation(url.absoluteString) }
+        }
+        .alert("Collection invitation", isPresented: Binding(
+            get: { invitationMessage != nil }, set: { if !$0 { invitationMessage = nil } }
+        )) { Button("OK", role: .cancel) {} }
+        message: { Text(invitationMessage ?? "") }
+    }
+
+    private func acceptInvitation(_ invitation: String) {
+        Task { @MainActor in
+            do {
+                try await socialStore.joinCollection(invitation: invitation)
+                selectedTab = .me
+                invitationMessage = "Collection joined. Open it from your profile."
+            } catch { invitationMessage = error.localizedDescription }
+        }
     }
 
     private func transition(to next: AppEntryRoute) {
@@ -239,6 +285,8 @@ private struct AuthenticationView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var attemptedSubmit = false
+    @State private var isSubmitting = false
+    @State private var authError: String?
     @FocusState private var focusedField: AuthField?
 
     private var isValid: Bool {
@@ -290,16 +338,43 @@ private struct AuthenticationView: View {
                         .padding(.top, 14)
                 }
 
-                MonoPrimaryButton(title: mode.button) {
+                if let authError {
+                    Text(authError)
+                        .monoBody(12)
+                        .foregroundStyle(BrandColor.collectedRed)
+                        .padding(.top, 14)
+                }
+
+                MonoPrimaryButton(title: isSubmitting ? "PLEASE WAIT…" : mode.button) {
                     attemptedSubmit = true
                     focusedField = nil
-                    guard isValid else { return }
-                    Haptics.light()
-                    onSuccess(mode == .signUp ? name.trimmingCharacters(in: .whitespaces) : "")
+                    guard isValid, !isSubmitting else { return }
+                    isSubmitting = true
+                    authError = nil
+                    Task { @MainActor in
+                        defer { isSubmitting = false }
+                        do {
+                            let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if mode == .login {
+                                _ = try await Auth.auth().signIn(withEmail: address, password: password)
+                            } else {
+                                let result = try await Auth.auth().createUser(withEmail: address, password: password)
+                                let change = result.user.createProfileChangeRequest()
+                                change.displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                                // Profile data is persisted separately even if this display-name update fails.
+                                try? await change.commitChanges()
+                            }
+                            Haptics.light()
+                            onSuccess(mode == .signUp ? name.trimmingCharacters(in: .whitespaces) : "")
+                        } catch {
+                            authError = error.localizedDescription
+                        }
+                    }
                 }
+                .disabled(isSubmitting)
                 .padding(.top, 34)
 
-                Text(mode == .login ? "Demo note: authentication is ready to connect to your team's backend." : "By continuing, you agree to MONO's Terms and Privacy Policy.")
+                Text(mode == .login ? "Sign in to your MONO account." : "By continuing, you agree to MONO's Terms and Privacy Policy.")
                     .monoBody(11)
                     .foregroundStyle(BrandColor.catalogGray)
                     .multilineTextAlignment(.center)
@@ -890,4 +965,7 @@ private struct SpotlightDimmer: View {
 #Preview("Onboarding") {
     AppRootView()
         .environmentObject(CollectionStore())
+        .environmentObject(SocialStore())
+        .environmentObject(CloudProfileStore())
 }
+

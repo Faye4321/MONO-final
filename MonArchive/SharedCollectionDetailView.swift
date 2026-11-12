@@ -18,9 +18,15 @@ struct SharedCollectionDetailView: View {
     private var collectionItems: [CollectibleItem] {
         guard let sharedCollection else { return [] }
 
+        if let remote = socialStore.cloudItems[collectionID] { return remote }
         return collectionStore.items.filter {
             sharedCollection.itemIDs.contains($0.id)
         }
+    }
+
+    private var canAddItems: Bool {
+        guard let sharedCollection else { return false }
+        return sharedCollection.permission == .everyoneCanAdd || sharedCollection.ownerID == socialStore.currentUserID
     }
 
     var body: some View {
@@ -34,7 +40,7 @@ struct SharedCollectionDetailView: View {
                         collectionHeader(sharedCollection)
                         memberSection(sharedCollection)
                         objectSection(sharedCollection)
-                        activitySection
+
                     }
                     .padding(.horizontal, 22)
                     .padding(.bottom, 40)
@@ -50,7 +56,7 @@ struct SharedCollectionDetailView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ShareLink(
-                            item: "Join my shared collection: \(sharedCollection.name)"
+                            item: socialStore.invitation(for: sharedCollection.id) ?? "Invitation is still being created"
                         ) {
                             Label("Share Invitation", systemImage: "square.and.arrow.up")
                         }
@@ -60,12 +66,9 @@ struct SharedCollectionDetailView: View {
                         } label: {
                             Label("Add Object", systemImage: "plus")
                         }
+                        .disabled(!canAddItems)
 
-                        Button {
-                            // Member management can be added later.
-                        } label: {
-                            Label("Manage Members", systemImage: "person.2")
-                        }
+
                     } label: {
                         Image(systemName: "ellipsis")
                             .foregroundStyle(ArchiveTheme.ink)
@@ -103,7 +106,7 @@ struct SharedCollectionDetailView: View {
                 Image(systemName: "person.2.fill")
 
                 Text(
-                    "\(collection.memberIDs.count + 1) MEMBERS"
+                    "\(collection.memberIDs.count) MEMBERS"
                 )
             }
             .font(ArchiveTheme.label(11))
@@ -139,6 +142,7 @@ struct SharedCollectionDetailView: View {
                                 )
                         }
                 }
+                .disabled(!canAddItems)
             }
         }
         .padding(.top, 18)
@@ -220,6 +224,7 @@ struct SharedCollectionDetailView: View {
                     }
                     .font(ArchiveTheme.label(11))
                     .foregroundStyle(ArchiveTheme.collectedRed)
+                    .disabled(!canAddItems)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 34)

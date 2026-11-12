@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function member(cid) {
+      return signedIn() && request.auth.uid in
+        get(/databases/$(database)/documents/sharedCollections/$(cid)).data.memberUIDs;
+    }
+    function canAdd(cid) {
+      let c = get(/databases/$(database)/documents/sharedCollections/$(cid)).data;
+      return member(cid) && (c.ownerUID == request.auth.uid || c.permission == 'everyoneCanAdd');
+    }
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+    match /invites/{token} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && token.size() == 64
+        && request.resource.data.keys().hasOnly(['collectionID', 'ownerUID'])
+        && request.resource.data.ownerUID == request.auth.uid
+        && getAfter(/databases/$(database)/documents/sharedCollections/$(request.resource.data.collectionID)).data.ownerUID == request.auth.uid
+        && getAfter(/databases/$(database)/documents/sharedCollections/$(request.resource.data.collectionID)).data.inviteToken == token;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.ownerUID == request.auth.uid;
+    }
+    match /sharedCollections/{cid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberUIDs;
+      allow create: if signedIn()
+        && request.resource.data.ownerUID == request.auth.uid
+        && request.resource.data.memberUIDs == [request.auth.uid]
+        && request.resource.data.memberNames.keys().hasOnly([request.auth.uid])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 150
+        && request.resource.data.permission in ['ownerOnly', 'everyoneCanAdd']
+        && request.resource.data.inviteToken is string && request.resource.data.inviteToken.size() == 64
+        && request.resource.data.itemIDs == [];
+      allow update: if signedIn() && (
+        // Existing members can append shared item IDs; item writes have their own authorization.
+        (request.auth.uid in resource.data.memberUIDs
+          && (resource.data.ownerUID == request.auth.uid || resource.data.permission == 'everyoneCanAdd')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itemIDs', 'updatedAt'])
+          && request.resource.data.itemIDs.hasAll(resource.data.itemIDs))
+        ||
+        // A joining user must supply the unguessable invitation token, and may only add themself.
+        (request.resource.data.joinProof == resource.data.inviteToken
+          && exists(/databases/$(database)/documents/invites/$(resource.data.inviteToken))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUIDs', 'memberNames', 'joinProof'])
+          && request.resource.data.memberUIDs.toSet() == resource.data.memberUIDs.toSet().union([request.auth.uid].toSet())
+          && request.resource.data.memberUIDs.size() <= 50
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.memberNames[request.auth.uid] is string
+          && request.resource.data.memberNames[request.auth.uid].size() <= 100)
+      );
+      allow delete: if signedIn() && resource.data.ownerUID == request.auth.uid;
+      match /items/{iid} {
+        allow read: if member(cid);
+        allow create: if canAdd(cid) && request.resource.data.uploaderUID == request.auth.uid
+          && request.resource.data.payload is string && request.resource.data.payload.size() < 400000
+          && (!('preview' in request.resource.data) || request.resource.data.preview.size() <= 180000);
+        allow update: if canAdd(cid) && resource.data.uploaderUID == request.auth.uid
+          && request.resource.data.uploaderUID == resource.data.uploaderUID
+          && request.resource.data.payload is string && request.resource.data.payload.size() < 400000
+          && (!('preview' in request.resource.data) || request.resource.data.preview.size() <= 180000);
+        allow delete: if member(cid) && (resource.data.uploaderUID == request.auth.uid ||
+          get(/databases/$(database)/documents/sharedCollections/$(cid)).data.ownerUID == request.auth.uid);
+      }
+    }
+  }
+}

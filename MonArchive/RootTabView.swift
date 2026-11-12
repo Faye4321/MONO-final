@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootTabView: View {
     @EnvironmentObject private var store: CollectionStore
+    @EnvironmentObject private var profileStore: CloudProfileStore
     @Environment(\.scenePhase) private var scenePhase
 
     @Binding var selection: AppTab
@@ -20,7 +21,7 @@ struct RootTabView: View {
             }
             .tag(AppTab.explore)
 
-            CollectionView()
+            CollectionView(onProfileTapped: { selection = .me })
                 .tabItem { Label("COLLECTION", systemImage: "rectangle.stack") }
                 .tag(AppTab.collection)
 
@@ -55,6 +56,7 @@ struct RootTabView: View {
             .accessibilityAddTraits(selection == .create ? .isSelected : [])
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.retryCloudSync(); profileStore.retry() }
             if phase == .background, store.pendingPurchase != nil {
                 leftForListing = true
             } else if phase == .active, leftForListing {
