@@ -330,24 +330,28 @@ private struct HomeJourneySection: View {
     }
 
     private var yearSwitcher: some View {
-        let index = years.firstIndex(of: year) ?? 0
+        // Step one year at a time. Earlier years are always reachable (an
+        // empty year shows the "appear here" message); forward stops at this
+        // year, or the latest year that has entries.
+        let latest = years.last ?? Calendar.current.component(.year, from: .now)
+        let earliest = min(years.first ?? latest, 1900)
         return HStack(spacing: 14) {
             Button {
                 Haptics.selection()
-                year = years[index - 1]
+                year -= 1
             } label: {
                 Image(systemName: "chevron.left").frame(width: 44, height: 44)
             }
-            .disabled(index == 0)
+            .disabled(year <= earliest)
             .accessibilityLabel("Previous year")
 
             Button {
                 Haptics.selection()
-                year = years[index + 1]
+                year += 1
             } label: {
                 Image(systemName: "chevron.right").frame(width: 44, height: 44)
             }
-            .disabled(index >= years.count - 1)
+            .disabled(year >= latest)
             .accessibilityLabel("Next year")
         }
         .font(.system(size: 14, weight: .semibold))
