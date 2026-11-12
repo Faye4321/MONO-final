@@ -9,9 +9,22 @@ struct RootTabView: View {
     @State private var leftForListing = false
     @State private var purchaseQuestion: ShopPick?
     @State private var purchaseMemory: Moment?
+    @State private var showingCreate = false
+
+    /// The blank CREATE tab only reserves the middle slot. It is never
+    /// selected, so the system's liquid-glass selection pill never appears
+    /// behind the custom button; Create opens full screen instead.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selection },
+            set: { newValue in
+                if newValue == .create { showingCreate = true } else { selection = newValue }
+            }
+        )
+    }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: tabSelection) {
             HomeView(
                 onProfileTapped: { selection = .me },
                 onOpenLab: { selection = .lab }
@@ -27,9 +40,7 @@ struct RootTabView: View {
 
             // The visible CREATE control is the round button overlaid below;
             // the system item stays blank so it doesn't show through.
-            CreateFlowView {
-                selection = .collection
-            }
+            Color.clear
                 .tabItem { Text("") }
                 .tag(AppTab.create)
 
@@ -46,14 +57,22 @@ struct RootTabView: View {
         .tint(ArchiveTheme.collectedRed)
         .overlay(alignment: .bottom) {
             Button {
-                selection = .create
+                showingCreate = true
             } label: {
-                CreateTabButton(isSelected: selection == .create)
+                CreateTabButton()
             }
             .buttonStyle(.plain)
             .padding(.bottom, CreateTabButton.bottomPadding)
             .accessibilityLabel("Create")
-            .accessibilityAddTraits(selection == .create ? .isSelected : [])
+        }
+        .fullScreenCover(isPresented: $showingCreate) {
+            CreateFlowView(
+                onSaved: {
+                    showingCreate = false
+                    selection = .collection
+                },
+                onCancel: { showingCreate = false }
+            )
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.retryCloudSync(); profileStore.retry() }

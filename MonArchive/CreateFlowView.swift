@@ -6,6 +6,9 @@ import UIKit
 struct CreateFlowView: View {
     @EnvironmentObject private var store: CollectionStore
     let onSaved: () -> Void
+    /// Shows a close button when set (Create is presented full screen).
+    var onCancel: (() -> Void)? = nil
+    @State private var confirmingDiscard = false
 
     @State private var step: AddItemStep = .selectPhoto
     @State private var selectedPhoto: PhotosPickerItem?
@@ -90,9 +93,28 @@ struct CreateFlowView: View {
                     .foregroundStyle(ArchiveTheme.catalogGray)
             }
             Spacer()
-            Text("STEP \(step.rawValue + 1) OF \(AddItemStep.allCases.count)")
-                .font(ArchiveTheme.label(10))
-                .foregroundStyle(ArchiveTheme.catalogGray)
+            VStack(alignment: .trailing, spacing: 10) {
+                if onCancel != nil {
+                    Button {
+                        if sourceImage == nil { onCancel?() } else { confirmingDiscard = true }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(ArchiveTheme.ink)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.8), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
+                }
+                Text("STEP \(step.rawValue + 1) OF \(AddItemStep.allCases.count)")
+                    .font(ArchiveTheme.label(10))
+                    .foregroundStyle(ArchiveTheme.catalogGray)
+            }
+        }
+        .confirmationDialog("Discard this object?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { onCancel?() }
+            Button("Keep editing", role: .cancel) {}
         }
     }
 
