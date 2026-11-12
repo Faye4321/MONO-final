@@ -1,0 +1,19 @@
+name: Chloe Explore checks
+on:
+  pull_request:
+    paths:
+      - 'MonArchive/**'
+      - 'MonArchive.xcodeproj/**'
+      - 'Tests/ExploreCoreTests/**'
+      - 'Package.swift'
+      - '.github/workflows/chloe-explore.yml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explore model, persistence and state tests
+        run: swift test
+      - name: Build iOS app for simulator
+        run: xcodebuild -project MonArchive.xcodeproj -scheme MonArchive -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

@@ -41,6 +41,19 @@ struct ArchiveSearchView: View {
             }
 
             Section("\(results.count) \(results.count == 1 ? "OBJECT" : "OBJECTS")") {
+                if results.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("No matching objects", systemImage: "magnifyingglass")
+                            .font(.headline)
+                        Text("Try another title or clear your filters. Your collection hasn’t changed.")
+                            .font(.subheadline).foregroundStyle(ArchiveTheme.catalogGray)
+                        Button("Clear search & filters") {
+                            query = ""; category = nil; condition = nil; rarity = nil; onlyWithMemories = false
+                        }
+                        .frame(minHeight: 44)
+                    }
+                    .padding(.vertical, 12)
+                }
                 ForEach(results) { item in
                     NavigationLink {
                         ItemDetailView(item: item)

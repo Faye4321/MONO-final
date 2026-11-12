@@ -3,7 +3,7 @@ import Foundation
 // eBay listings shown in the home "Picked for You" carousel.
 // Static for now; once eBay API access is approved, replace
 // `ShopPicks.featured` with data fetched through a backend proxy.
-struct ShopPick: Identifiable, Hashable {
+struct ShopPick: Identifiable, Hashable, Codable {
     let itemId: String
     let category: CollectionCategory
     let title: String

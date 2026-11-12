@@ -1,398 +1,248 @@
 import SwiftUI
 
+/// Chloe's module owns its navigation and ExploreStore. Pass Fei's repositories
+/// through the initializer when the shared Firebase layer is ready.
+@MainActor
 struct HomeView: View {
     @EnvironmentObject private var store: CollectionStore
+    @StateObject private var explore: ExploreStore
+    @AppStorage(CollectingPreferences.storageKey) private var collectsRaw = ""
+    @State private var category: CollectionCategory?
     let onProfileTapped: () -> Void
     let onOpenLab: () -> Void
 
-    @AppStorage(CollectingPreferences.storageKey) private var collectsRaw = ""
-
     init(
         onProfileTapped: @escaping () -> Void = {},
-        onOpenLab: @escaping () -> Void = {}
+        onOpenLab: @escaping () -> Void = {},
+        catalogProvider: (any ExploreCatalogProviding)? = nil,
+        wishlistProvider: (any ExploreWishlistProviding)? = nil
     ) {
         self.onProfileTapped = onProfileTapped
         self.onOpenLab = onOpenLab
+        _explore = StateObject(wrappedValue: ExploreStore(catalog: catalogProvider, wishlist: wishlistProvider))
+    }
+
+    private var preferred: [CollectionCategory] { CollectingPreferences.categories(from: collectsRaw) }
+    private var collected: [CollectionCategory] { store.activeItems.map(\.category) }
+    private var ranked: [ShopPick] {
+        ExploreQuery.ranked(explore.picks, preferred: preferred, saved: explore.saved, collected: collected)
+    }
+    private var filtered: [ShopPick] {
+        ExploreQuery.results(ranked, query: "", category: category, sort: .recommended)
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let metrics = HomeMetrics(width: proxy.size.width)
-
-            ScrollView(.vertical) {
-                LazyVStack(spacing: metrics.sectionSpacing) {
-                    HeaderView {
-                        Haptics.light()
-                        onProfileTapped()
+        NavigationStack {
+            GeometryReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 28) {
+                        header
+                        searchEntry
+                        discoveries
+                        HomeJourneySection()
+                        CollageStudioCard(height: proxy.size.width < 375 ? 340 : 360, showsArtwork: proxy.size.width >= 393) {
+                            Haptics.light(); onOpenLab()
+                        }
                     }
-
-                    PickedForYouCarousel(
-                        picks: ShopPicks.featured(
-                            prioritizing: CollectingPreferences.categories(from: collectsRaw)
-                        ),
-                        height: metrics.heroHeight
-                    )
-
-                    HomeJourneySection()
-
-                    // Collage Studio is the Lab tab.
-                    CollageStudioCard(height: metrics.studioHeight) {
-                        Haptics.light()
-                        onOpenLab()
-                    }
+                    .padding(.horizontal, proxy.size.width < 375 ? 14 : 18)
+                    .padding(.top, 12).padding(.bottom, 28)
+                    .frame(maxWidth: 540).frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: metrics.maxContentWidth)
-                .padding(.horizontal, metrics.horizontalPadding)
-                .padding(.top, 8)
-                .padding(.bottom, 26)
-                .frame(maxWidth: .infinity)
+                .scrollIndicators(.hidden)
+                .refreshable { await explore.loadCatalog() }
+                .background(BrandColor.archiveIvory)
+                .toolbar(.hidden, for: .navigationBar)
             }
-            .scrollIndicators(.hidden)
-            .background(BrandColor.archiveIvory)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { ExploreFeedbackBar() }
+        .environmentObject(explore)
+        .tint(BrandColor.collectedRed)
+        .task { await explore.loadIfNeeded() }
+        .alert(item: $explore.mutationIssue) { issue in
+            Alert(
+                title: Text("Wishlist wasn’t updated"),
+                message: Text("Your previous saved state is unchanged. Please try again."),
+                primaryButton: .default(Text("Try again")) {
+                    Task { await explore.setSaved(issue.pick, saved: issue.desiredSaved) }
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("EXPLORE").monoHeading(22, tracking: 0.6)
+                    .foregroundStyle(BrandColor.inkBlack)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(context.date.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
+                        .font(.caption2).foregroundStyle(BrandColor.catalogGray)
+                }
+            }
+            Spacer(minLength: 4)
+            NavigationLink {
+                ExploreWishlistView()
+            } label: {
+                Image(systemName: "heart")
+                    .font(.system(size: 19))
+                    .frame(width: 44, height: 44)
+                    .overlay(alignment: .topTrailing) {
+                        if !explore.saved.isEmpty {
+                            Circle().fill(BrandColor.collectedRed).frame(width: 7, height: 7).padding(5)
+                        }
+                    }
+            }
+            .accessibilityLabel("Wishlist, \(explore.saved.count) saved finds")
+            .accessibilityIdentifier("explore.openWishlist")
+            Button {
+                Haptics.light(); onProfileTapped()
+            } label: {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 17)).foregroundStyle(BrandColor.archiveIvory)
+                    .frame(width: 44, height: 44)
+                    .background(BrandColor.collectedRed, in: Circle())
+            }
+            .buttonStyle(.plain).accessibilityLabel("Open profile")
+        }
+    }
+
+    private var searchEntry: some View {
+        NavigationLink {
+            ExploreSearchView()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                Text("Find your next favorite").font(.subheadline)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right").font(.caption)
+            }
+            .foregroundStyle(BrandColor.catalogGray)
+            .padding(.horizontal, 16).frame(minHeight: 50)
+            .background(BrandColor.softCard, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain).accessibilityIdentifier("explore.openSearch")
+    }
+
+    private var discoveries: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("A good find.\nA little more you.")
+                    .font(.system(.largeTitle, design: .serif))
+                    .foregroundStyle(BrandColor.inkBlack)
+                Text("PICKED FOR YOU").font(.caption.weight(.medium)).tracking(1)
+                    .foregroundStyle(BrandColor.collectedRed)
+            }
+            switch explore.catalogState {
+            case .idle, .loading:
+                ExploreLoadingView()
+            case .failed(let message):
+                ExploreStateView(symbol: "wifi.exclamationmark", title: "A small pause in discovery", message: message, actionTitle: "Try again") {
+                    Task { await explore.loadCatalog() }
+                }
+            case .loaded:
+                if ranked.isEmpty {
+                    ExploreStateView(symbol: "sparkle.magnifyingglass", title: "New finds are on their way", message: "There’s nothing to recommend just yet. Check back soon.", actionTitle: "Refresh finds") {
+                        Task { await explore.loadCatalog() }
+                    }
+                } else {
+                    ExploreFeaturedCarousel(picks: Array(ranked.prefix(6)), preferred: preferred, collected: collected)
+                    Text("Selected using your interests, wishlist and collection categories. Curated sample listings; verify prices on eBay.")
+                        .font(.footnote).foregroundStyle(BrandColor.catalogGray)
+                    HStack {
+                        Text("BROWSE FINDS").font(.caption.weight(.medium)).tracking(0.7)
+                        Spacer()
+                        Text("\(filtered.count) FINDS").font(.caption).foregroundStyle(BrandColor.catalogGray)
+                    }
+                    ExploreCategoryFilter(category: $category)
+                    if filtered.isEmpty {
+                        ExploreStateView(symbol: "tray", title: "No finds in this category yet", message: "Try browsing all finds.", actionTitle: "Show all finds") { category = nil }
+                    } else { ExplorePickGrid(picks: filtered) }
+                }
+            }
+            if case .failed = explore.wishlistState {
+                NavigationLink { ExploreWishlistView() } label: {
+                    Label("Wishlist unavailable · Open to retry", systemImage: "exclamationmark.circle")
+                        .font(.subheadline).frame(minHeight: 44)
+                }
+            }
         }
     }
 }
 
-// MARK: - Responsive Layout
-
-private struct HomeMetrics {
-    let width: CGFloat
-
-    var horizontalPadding: CGFloat {
-        width < 375 ? 14 : 18
-    }
-
-    var sectionSpacing: CGFloat {
-        width < 375 ? 24 : 30
-    }
-
-    var heroHeight: CGFloat {
-        width < 375 ? 410 : 438
-    }
-
-    var studioHeight: CGFloat {
-        width < 375 ? 320 : 344
-    }
-
-    var maxContentWidth: CGFloat {
-        460
-    }
-}
-
-// MARK: - Header
-
-private struct HeaderView: View {
-    let profileAction: () -> Void
+private struct ExploreFeaturedCarousel: View {
+    @EnvironmentObject private var explore: ExploreStore
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var currentID: String?
+    let picks: [ShopPick]
+    let preferred: [CollectionCategory]
+    let collected: [CollectionCategory]
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("EXPLORE")
-                    .monoHeading(20, tracking: 0.6)
-                    .foregroundStyle(BrandColor.inkBlack)
-
-                Text("SUNDAY, OCTOBER 4")
-                    .monoLabel(10, tracking: 0.7)
-                    .foregroundStyle(BrandColor.catalogGray)
+        if typeSize.isAccessibilitySize {
+            if let pick = picks.first {
+                card(pick, index: 0)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer()
-
-            Button(action: profileAction) {
-                ZStack {
-                    Circle()
-                        .fill(BrandColor.collectedRed)
-
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(BrandColor.archiveIvory)
+        } else {
+            ScrollView(.horizontal) {
+                // There are at most six featured picks. Measure them eagerly so
+                // the row uses its content height rather than a fixed viewport.
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(Array(picks.enumerated()), id: \.element.id) { index, pick in
+                        card(pick, index: index)
+                            .containerRelativeFrame(.horizontal) { width, _ in
+                                max(1, width - 22)
+                            }
+                    }
                 }
-                .frame(width: 38, height: 38)
+                .scrollTargetLayout()
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $currentID)
+            .scrollIndicators(.hidden)
+            .contentMargins(.trailing, 22, for: .scrollContent)
+        }
+    }
+
+    private func card(_ pick: ShopPick, index: Int) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink {
+                ExplorePickDetailView(pick: pick)
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(String(format: "%02d / %02d", index + 1, picks.count))
+                                .font(.caption2).foregroundStyle(BrandColor.catalogGray)
+                            Text(pick.title).font(.system(.title, design: .serif))
+                                .foregroundStyle(BrandColor.inkBlack)
+                                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                        }
+                        Spacer(minLength: 44)
+                    }
+                    ExploreArtwork(pick: pick)
+                        .frame(height: typeSize.isAccessibilitySize ? 220 : 170)
+                        .frame(maxWidth: .infinity)
+                    // Keep the price at the bottom when a neighbouring title
+                    // wraps, without adding space beneath the price itself.
+                    Spacer(minLength: 0)
+                    Text(ExploreQuery.reason(for: pick, preferred: preferred, saved: explore.saved, collected: collected))
+                        .font(.footnote).foregroundStyle(BrandColor.catalogGray)
+                    HStack {
+                        Text(pick.priceText).font(.subheadline)
+                        Spacer()
+                        Image(systemName: "arrow.up.right").frame(width: 44, height: 44)
+                    }
+                    .foregroundStyle(BrandColor.inkBlack)
+                }
+                .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .background(BrandColor.heroStone, in: RoundedRectangle(cornerRadius: 24))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open profile")
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 4)
-    }
-}
-
-// MARK: - Picked for You
-
-private struct PickedForYouCarousel: View {
-    let picks: [ShopPick]
-    let height: CGFloat
-
-    @EnvironmentObject private var store: CollectionStore
-    @Environment(\.openURL) private var openURL
-    @State private var currentID: ShopPick.ID?
-
-    private var currentIndex: Int {
-        picks.firstIndex { $0.id == currentID } ?? 0
-    }
-
-    // How much of the next card shows at the trailing edge.
-    private let peek: CGFloat = 22
-    private let spacing: CGFloat = 10
-
-    var body: some View {
-        GeometryReader { proxy in
-            carousel(cardWidth: proxy.size.width - peek - spacing)
-        }
-        .frame(height: height)
-    }
-
-    private func carousel(cardWidth: CGFloat) -> some View {
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: spacing) {
-                ForEach(picks) { pick in
-                    Button {
-                        Haptics.light()
-                        // Ask "did you get it?" when the user comes back.
-                        store.pendingPurchase = pick
-                        openURL(pick.itemWebURL)
-                    } label: {
-                        PickedForYouCard(
-                            pick: pick,
-                            position: currentIndex + 1,
-                            total: picks.count,
-                            height: height
-                        )
-                    }
-                    .buttonStyle(PressScaleButtonStyle())
-                    .accessibilityHint("Opens this listing on eBay")
-                    .frame(width: cardWidth)
-                }
-            }
-            .scrollTargetLayout()
-        }
-        // Cards are narrower than the row, so the next one peeks in at the
-        // trailing edge; that is the cue that the row can be swiped.
-        .contentMargins(.trailing, peek + spacing, for: .scrollContent)
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $currentID)
-        .scrollIndicators(.hidden)
-        .onChange(of: currentID) {
-            Haptics.selection()
-        }
-        .accessibilityAdjustableAction { direction in
-            let step = direction == .increment ? 1 : -1
-            let target = min(max(currentIndex + step, 0), picks.count - 1)
-            withAnimation {
-                currentID = picks[target].id
-            }
-        }
-    }
-}
-
-private struct PickedForYouCard: View {
-    let pick: ShopPick
-    let position: Int
-    let total: Int
-    let height: CGFloat
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(
-                    cornerRadius: 27,
-                    style: .continuous
-                )
-                .fill(BrandColor.heroStone)
-
-                PickArtwork(pick: pick)
-                    .frame(width: 150, height: 214)
-                    .position(x: width - 96, y: height - 165)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("PICKED FOR YOU")
-
-                        Spacer()
-
-                        Text(
-                            String(
-                                format: "%02d / %02d",
-                                position,
-                                total
-                            )
-                        )
-                    }
-                    .monoLabel(10, tracking: 0.5)
-                    .foregroundStyle(BrandColor.catalogGray)
-
-                    Text(pick.title)
-                        .font(
-                            .system(
-                                size: 38,
-                                weight: .regular,
-                                design: .serif
-                            )
-                        )
-                        .foregroundStyle(BrandColor.inkBlack)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.6)
-                        .padding(.top, 17)
-
-                    Text(pick.priceText)
-                        .monoBody(15)
-                        .foregroundStyle(BrandColor.catalogGray)
-                        .padding(.top, 5)
-
-                    Text(pick.subtitle)
-                        .monoLabel(10, tracking: 0.55)
-                        .foregroundStyle(BrandColor.catalogGray)
-                        .lineLimit(2)
-                        .frame(
-                            maxWidth: width - 192,
-                            alignment: .leading
-                        )
-                        .padding(.top, 10)
-
-                    Spacer()
-
-                    HStack(spacing: 8) {
-                        Text("SHOP ON EBAY")
-
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .monoLabel(11, tracking: 0.4)
-                    .foregroundStyle(BrandColor.inkBlack)
-                    .padding(.bottom, 5)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(BrandColor.inkBlack)
-                            .frame(height: 1)
-                    }
-                }
-                .padding(21)
-
-                EditorNote(text: pick.note)
-                    .frame(width: 150, height: 108)
-                    .rotationEffect(.degrees(-3))
-                    .position(x: 99, y: height - 142)
-                    .accessibilityElement(children: .combine)
-            }
-        }
-        .frame(height: height)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: 27,
-                style: .continuous
-            )
-        )
-        .contentShape(
-            RoundedRectangle(
-                cornerRadius: 27,
-                style: .continuous
-            )
-        )
-    }
-}
-
-// MARK: - Pick Artwork
-
-private struct PickArtwork: View {
-    let pick: ShopPick
-
-    var body: some View {
-        Group {
-            if let imageName = pick.imageName,
-               let image = UIImage(named: imageName) {
-                framed(Image(uiImage: image))
-            } else if let imageURL = pick.imageURL {
-                AsyncImage(url: imageURL) { phase in
-                    if let image = phase.image {
-                        framed(image)
-                    } else {
-                        placeholder
-                    }
-                }
-            } else {
-                placeholder
-            }
-        }
-        .shadow(
-            color: .black.opacity(0.12),
-            radius: 10,
-            y: 6
-        )
-    }
-
-    // eBay photos vary in shape and background; a white mat keeps the
-    // carousel consistent without cropping the listing photo.
-    private func framed(_ image: Image) -> some View {
-        image
-            .resizable()
-            .scaledToFit()
-            .padding(10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                Color.white,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(
-            cornerRadius: 6,
-            style: .continuous
-        )
-        .fill(BrandColor.softCard)
-        .aspectRatio(
-            pick.category.artworkAspectRatio,
-            contentMode: .fit
-        )
-        .overlay {
-            Image(systemName: pick.category.systemImage)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(BrandColor.catalogGray)
-        }
-    }
-}
-
-// MARK: - Editor Note
-
-private struct EditorNote: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("EDITOR’S NOTE")
-                .monoLabel(9, tracking: 0.3)
-                .foregroundStyle(BrandColor.collectedRed)
-
-            Text(text)
-                .monoBody(11)
-                .foregroundStyle(BrandColor.inkBlack)
-                .lineSpacing(2)
-        }
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: .topLeading
-        )
-        .padding(14)
-        .background(
-            Color(hex: 0xF8F4EC),
-            in: RoundedRectangle(
-                cornerRadius: 4,
-                style: .continuous
-            )
-        )
-        .shadow(
-            color: .black.opacity(0.06),
-            radius: 7,
-            y: 4
-        )
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(BrandColor.paperTan.opacity(0.72))
-                .frame(width: 54, height: 14)
-                .offset(y: -7)
+            ExploreSaveButton(pick: pick).padding(12)
         }
     }
 }
@@ -469,7 +319,7 @@ private struct HomeJourneySection: View {
             focusedIndex = MemoryCalendar.defaultIndex(in: pages)
         }
         .onChange(of: pages.count) {
-            focusedIndex = min(focusedIndex, pages.count - 1)
+            focusedIndex = max(0, min(focusedIndex, pages.count - 1))
         }
         .sheet(item: $selectedMoment) { moment in
             MomentObjectsSheet(moment: moment)
@@ -486,7 +336,7 @@ private struct HomeJourneySection: View {
                 Haptics.selection()
                 year = years[index - 1]
             } label: {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.left").frame(width: 44, height: 44)
             }
             .disabled(index == 0)
             .accessibilityLabel("Previous year")
@@ -495,7 +345,7 @@ private struct HomeJourneySection: View {
                 Haptics.selection()
                 year = years[index + 1]
             } label: {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.right").frame(width: 44, height: 44)
             }
             .disabled(index >= years.count - 1)
             .accessibilityLabel("Next year")
@@ -510,6 +360,7 @@ private struct HomeJourneySection: View {
 
 private struct CollageStudioCard: View {
     let height: CGFloat
+    var showsArtwork = true
     let action: () -> Void
 
     var body: some View {
@@ -571,13 +422,21 @@ private struct CollageStudioCard: View {
             }
             .padding(21)
 
-            CollageArtwork()
-                .frame(width: 178, height: 188)
-                .position(
-                    x: 278,
-                    y: height - 102
-                )
-                .accessibilityHidden(true)
+            if showsArtwork {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        CollageArtwork()
+                            .frame(width: 178, height: 188)
+                            .scaleEffect(0.7, anchor: .bottomTrailing)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .padding(.trailing, 12)
+                .padding(.bottom, 18)
+                .allowsHitTesting(false)
+            }
         }
         .frame(height: height)
         .clipShape(
@@ -721,16 +580,15 @@ private struct PressScaleButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Previews
-
-#Preview("iPhone 15 Pro") {
-    HomeView()
-        .environmentObject(CollectionStore())
-        .frame(width: 393, height: 852)
+#if DEBUG
+#Preview("Explore · SE") {
+    HomeView(catalogProvider: ExplorePreviewCatalog(), wishlistProvider: ExplorePreviewWishlist()).environmentObject(CollectionStore()).frame(width: 375, height: 667)
+}
+#Preview("Explore · Pro Max") {
+    HomeView(catalogProvider: ExplorePreviewCatalog(), wishlistProvider: ExplorePreviewWishlist()).environmentObject(CollectionStore()).frame(width: 440, height: 956)
+}
+#Preview("Explore · Large text") {
+    HomeView(catalogProvider: ExplorePreviewCatalog(), wishlistProvider: ExplorePreviewWishlist()).environmentObject(CollectionStore()).dynamicTypeSize(.accessibility2)
 }
 
-#Preview("iPhone SE") {
-    HomeView()
-        .environmentObject(CollectionStore())
-        .frame(width: 375, height: 667)
-}
+#endif
