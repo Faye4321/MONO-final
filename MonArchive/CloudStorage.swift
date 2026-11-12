@@ -54,6 +54,8 @@ struct CloudAccountPanel: View {
                 if let error = profileStore.errorMessage {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
+                if store.catalogSyncing { ProgressView("Saving collections…") }
+                if let error = store.catalogError { Text(error).font(.caption).foregroundStyle(.red) }
                 if let error = store.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
                 if let error = socialStore.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
                 if socialStore.cloudBusy { ProgressView("Creating collection…") }

@@ -651,7 +651,7 @@ struct CalendarFlipView: View {
                         .frame(height: cardHeight)
                         .padding(.horizontal, 20)
                         .containerRelativeFrame(.vertical)
-                        .scrollTransition(axis: .vertical) { content, phase in
+                        .scrollTransition(axis: .vertical) { [reduceMotion] content, phase in
                             content
                                 .scaleEffect(phase.isIdentity || reduceMotion ? 1 : 0.9)
                                 .offset(y: reduceMotion ? 0 : phase.value * -60)

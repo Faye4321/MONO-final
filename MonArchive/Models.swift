@@ -49,6 +49,7 @@ enum CollectionCategory: String, CaseIterable, Identifiable, Hashable, Codable {
 struct CollectibleItem: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
+    var collectionID: UUID?
     var creator: String
     var year: Int?
     var category: CollectionCategory
@@ -84,6 +85,7 @@ struct CollectibleItem: Identifiable, Hashable, Codable {
     init(
         id: UUID = UUID(),
         title: String,
+        collectionID: UUID? = nil,
         creator: String,
         year: Int? = nil,
         category: CollectionCategory,
@@ -107,6 +109,7 @@ struct CollectibleItem: Identifiable, Hashable, Codable {
     ) {
         self.id = id
         self.title = title
+        self.collectionID = collectionID
         self.creator = creator
         self.year = year
         self.category = category
@@ -130,7 +133,7 @@ struct CollectibleItem: Identifiable, Hashable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, creator, year, category, note, colorA, colorB
+        case id, title, collectionID, creator, year, category, note, colorA, colorB
         case imageName, imageData, imageFileName
         case brightness, contrast, saturation, isUserCreated
         case pricePaid, condition, rarity, meaning, meaningTag, partedOn, addedOn
@@ -141,6 +144,7 @@ struct CollectibleItem: Identifiable, Hashable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
+        collectionID = try container.decodeIfPresent(UUID.self, forKey: .collectionID)
         creator = try container.decodeIfPresent(String.self, forKey: .creator) ?? ""
         year = try container.decodeIfPresent(Int.self, forKey: .year)
         category = try container.decode(CollectionCategory.self, forKey: .category)
@@ -167,6 +171,7 @@ struct CollectibleItem: Identifiable, Hashable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(collectionID, forKey: .collectionID)
         try container.encode(creator, forKey: .creator)
         try container.encodeIfPresent(year, forKey: .year)
         try container.encode(category, forKey: .category)
@@ -250,6 +255,32 @@ enum MeaningTag: String, CaseIterable, Identifiable, Codable {
         case .favorite: "Favorite"
         case .milestone: "Milestone"
         case .grail: "Grail"
+        }
+    }
+}
+
+
+/// A user-owned shelf, independent of the object's visual format/category.
+struct PersonalCollection: Identifiable, Hashable, Codable {
+    let id: UUID
+    var name: String
+    var layout: CollectionCategory
+    var deletedAt: Date?
+
+    static func defaultID(for category: CollectionCategory) -> UUID {
+        let suffix: String
+        switch category {
+        case .vinyl: suffix = "1"
+        case .bjd: suffix = "2"
+        case .poster: suffix = "3"
+        case .photocard: suffix = "4"
+        }
+        return UUID(uuidString: "CA110000-0000-4000-8000-00000000000" + suffix)!
+    }
+
+    static var defaults: [PersonalCollection] {
+        CollectionCategory.allCases.map {
+            PersonalCollection(id: defaultID(for: $0), name: $0.title, layout: $0)
         }
     }
 }

@@ -67,6 +67,7 @@ struct AppRootView: View {
             case .signUp:
                 AuthenticationView(mode: .signUp, onBack: { transition(to: .welcome) }) { name in
                     newMemberName = name
+                    store.requestDefaultCleanupOfferForNewAccount()
                     if !name.isEmpty { profileStore.registerName(name) }
                     transition(to: .setupWelcome)
                 }
@@ -563,47 +564,76 @@ private struct SetupWelcomeView: View {
 }
 
 private struct CollectingPreferencesView: View {
+    @EnvironmentObject private var store: CollectionStore
+    @State private var showingNewCollection = false
+    @State private var customCollection: PersonalCollection?
     @AppStorage(CollectingPreferences.storageKey) private var collectsRaw = ""
     @State private var selected: [CollectionCategory] = []
     let onContinue: () -> Void
-
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            OnboardingProgress(step: 1)
-
-            Text("What do you collect?")
-                .monoTitle(36, tracking: -0.9)
-                .foregroundStyle(BrandColor.inkBlack)
-                .padding(.top, 34)
-            Text("Pick all that apply. We'll set up Create and your picks around them.")
-                .monoBody(15)
-                .foregroundStyle(BrandColor.catalogGray)
-                .lineSpacing(3)
-                .padding(.top, 10)
-
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(CollectionCategory.allCases) { category in
-                    tile(for: category)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                OnboardingProgress(step: 1)
+                Text("What do you collect?")
+                    .monoTitle(36, tracking: -0.9)
+                    .foregroundStyle(BrandColor.inkBlack)
+                    .padding(.top, 34)
+                Text("Choose a category, or create a collection of your own.")
+                    .monoBody(15)
+                    .foregroundStyle(BrandColor.catalogGray)
+                    .padding(.top, 10)
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(CollectionCategory.allCases) { category in tile(for: category) }
+                    customTile
                 }
+                .padding(.top, 30)
             }
-            .padding(.top, 30)
-
-            Spacer(minLength: 30)
-
+            .padding(.horizontal, 26)
+            .padding(.vertical, 22)
+        }
+        .safeAreaInset(edge: .bottom) {
             MonoPrimaryButton(title: "CONTINUE") {
                 collectsRaw = CollectingPreferences.raw(from: selected)
+                store.onboardingPreferredCollectionID = customCollection?.id
+                    ?? selected.first.map(PersonalCollection.defaultID)
                 onContinue()
             }
-            .disabled(selected.isEmpty)
-            .opacity(selected.isEmpty ? 0.4 : 1)
+            .disabled(selected.isEmpty && customCollection == nil)
+            .opacity(selected.isEmpty && customCollection == nil ? 0.4 : 1)
+            .padding(.horizontal, 26).padding(.vertical, 16)
+            .background(BrandColor.archiveIvory)
         }
-        .padding(.horizontal, 26)
-        .padding(.vertical, 22)
-        .onAppear {
-            selected = CollectingPreferences.categories(from: collectsRaw)
+        .sheet(isPresented: $showingNewCollection) {
+            NewPersonalCollectionSheet { collection in
+                customCollection = collection
+                store.onboardingPreferredCollectionID = collection.id
+            }
         }
+        .onAppear { selected = CollectingPreferences.categories(from: collectsRaw) }
+    }
+
+    private var customTile: some View {
+        Button { showingNewCollection = true } label: {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Image(systemName: "plus.rectangle.on.rectangle").font(.system(size: 24, weight: .light))
+                    Spacer()
+                    Image(systemName: customCollection == nil ? "circle" : "checkmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(customCollection == nil ? BrandColor.catalogGray.opacity(0.5) : BrandColor.collectedRed)
+                }
+                Text(customCollection?.name ?? "Custom collection").monoHeading(15)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(BrandColor.inkBlack)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+            .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
+        .disabled(!store.catalogReady)
     }
 
     private func tile(for category: CollectionCategory) -> some View {
@@ -928,6 +958,15 @@ private struct SpotlightDimmer: View {
     let target: CGRect
     var insets = EdgeInsets()
 
+    @ViewBuilder
+    private var animatedArrow: some View {
+        if #available(iOS 18.0, *) {
+            Image(systemName: "arrow.down").symbolEffect(.bounce, options: .repeating)
+        } else {
+            Image(systemName: "arrow.down")
+        }
+    }
+
     var body: some View {
         GeometryReader { proxy in
             Path { path in
@@ -952,11 +991,10 @@ private struct SpotlightDimmer: View {
                 .position(x: target.midX, y: target.midY)
                 .shadow(color: .white.opacity(0.38), radius: 9)
 
-            Image(systemName: "arrow.down")
+            animatedArrow
                 .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(.white)
                 .position(x: target.midX, y: target.minY - 22)
-                .symbolEffect(.bounce, options: .repeating)
         }
         .allowsHitTesting(false)
     }

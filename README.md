@@ -82,3 +82,9 @@ Each item/memory is a separate record. Edits to different records do not overwri
 ## GitHub submission
 
 Commit the project folder contents, including `MonArchive/`, `MonArchive.xcodeproj/`, `cloud/`, `scripts/`, `docs/`, `.gitignore`, `firebase.json`, and this README. Do not upload only a ZIP or only `.xcodeproj`. Use GitHub Desktop to commit and push all changes. Check that `Package.resolved` and the shared scheme are visible online. No `DerivedData`, `SourcePackages`, user state or admin credentials are needed in the repository.
+
+## Personal collection creation/deletion update
+
+Create user-named collections from Collection, onboarding, or Create's destination selector. The four default collections can also be individually deleted. Deleting a collection retains its objects/photos in Unfiled; Recently deleted restores the same collection identity. For accounts registered inside this version, a first-time optional button on the Collection page can remove only built-in examples. It appears after onboarding, not as an onboarding-end modal. The decision requires an online transaction and is not repeated on another device. Old accounts are not enrolled retroactively. Custom is a tile on onboarding step 1, and that collection is carried into the first-object flow. Empty shelves share one empty wooden display shelf; deleting a shelf hides it from the main list.
+
+See `docs/faye/COLLECTION_DATA_CONTRACT.md` for APIs, cloud paths, migration and team merge notes, and `docs/faye/COLLECTION_ACCEPTANCE.md` for validation limits and device acceptance checks. No new backend rules, packages or target membership are required.

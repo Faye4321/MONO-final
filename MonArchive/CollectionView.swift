@@ -4,6 +4,12 @@ struct CollectionView: View {
     @EnvironmentObject private var store: CollectionStore
     let onProfileTapped: () -> Void
     @State private var showPlan = false
+    @State private var showingNewCollection = false
+    @State private var showingDeletedCollections = false
+    @State private var collectionPendingDeletion: PersonalCollection?
+    @State private var confirmingSampleRemoval = false
+    @State private var decidingSamples = false
+    @State private var sampleError: String?
 
     init(onProfileTapped: @escaping () -> Void = {}) {
         self.onProfileTapped = onProfileTapped
@@ -18,24 +24,56 @@ struct CollectionView: View {
                     VStack(alignment: .leading, spacing: 26) {
                         header
                         archiveSummary
+                        if store.defaultCleanupOffered { sampleCleanupOffer }
+                        if !store.sampleUndo.isEmpty { sampleUndoNotice }
 
                         Text("YOUR COLLECTIONS")
                             .font(ArchiveTheme.label(11))
                             .tracking(1.1)
                             .foregroundStyle(ArchiveTheme.catalogGray)
 
+                        if !store.catalogReady { ProgressView("Loading collections…") }
+                        if let error = store.catalogError {
+                            Text(error).font(ArchiveTheme.body(12)).foregroundStyle(ArchiveTheme.collectedRed)
+                            Button("Retry sync") { store.retryCloudSync() }
+                        }
                         LazyVStack(spacing: 16) {
-                            ForEach(CollectionCategory.allCases) { category in
-                                NavigationLink(value: category) {
-                                    CollectionCard(
-                                        category: category,
-                                        itemCount: store.count(for: category),
-                                        items: Array(store.items(for: category).prefix(3))
-                                    )
+                            ForEach(store.activeCollections) { collection in
+                                NavigationLink {
+                                    ShelfDetailView(category: collection.layout, collectionID: collection.id)
+                                } label: {
+                                    CollectionCard(category: collection.layout,
+                                        itemCount: store.items(in: collection.id).count,
+                                        items: Array(store.items(in: collection.id).prefix(3)),
+                                        collectionName: collection.name)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Delete Collection", role: .destructive) { collectionPendingDeletion = collection }
+                                }
+                            }
+                            if !store.unfiledItems.isEmpty {
+                                NavigationLink {
+                                    ShelfDetailView(category: .poster, showsUnfiled: true)
+                                } label: {
+                                    Label("Unfiled · \(store.unfiledItems.count) objects", systemImage: "tray")
+                                        .font(ArchiveTheme.heading(16))
+                                        .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                                        .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 18))
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+                        Button("CREATE A COLLECTION") { showingNewCollection = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(ArchiveTheme.collectedRed)
+                            .disabled(!store.catalogReady)
+                        Button("Recently deleted collections (\(store.deletedCollections.count))") {
+                            showingDeletedCollections = true
+                        }
+                        .font(ArchiveTheme.body(13))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 18)
@@ -48,11 +86,100 @@ struct CollectionView: View {
             }
         }
         .foregroundStyle(ArchiveTheme.ink)
+        .environment(\.colorScheme, .light)
+        .sheet(isPresented: $showingNewCollection) { NewPersonalCollectionSheet() }
+        .sheet(isPresented: $showingDeletedCollections) { DeletedCollectionsSheet() }
+        .confirmationDialog("Delete this collection?", isPresented: Binding(
+            get: { collectionPendingDeletion != nil }, set: { if !$0 { collectionPendingDeletion = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete Collection", role: .destructive) {
+                if let collection = collectionPendingDeletion { store.deletePersonalCollection(collection.id) }
+                collectionPendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { collectionPendingDeletion = nil }
+        } message: {
+            Text("Your objects and photos will be kept in Unfiled. Restore this collection from Recently deleted to undo.")
+        }
+        .confirmationDialog("Remove sample objects?", isPresented: $confirmingSampleRemoval, titleVisibility: .visible) {
+            Button("Remove examples", role: .destructive) { decideSamples(remove: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your uploads and collections stay. Only the sample objects are removed.")
+        }
         .sheet(isPresented: $showPlan) {
             ArchivePlanView(objectCount: store.items.count)
                 .environment(\.colorScheme, .light)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var sampleCleanupOffer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(ArchiveTheme.collectedRed)
+                    .frame(width: 34, height: 34)
+                    .background(ArchiveTheme.collectedRed.opacity(0.08), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Make it yours").font(ArchiveTheme.heading(16))
+                    Text("\(store.defaultExampleCount) sample objects · Your uploads stay")
+                        .font(ArchiveTheme.body(12))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                }
+            }
+            HStack(spacing: 10) {
+                Button { confirmingSampleRemoval = true } label: {
+                    HStack(spacing: 6) {
+                        Text("REMOVE EXAMPLES")
+                        Image(systemName: "trash")
+                    }
+                    .font(ArchiveTheme.label(9))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(.white)
+                    .background(ArchiveTheme.collectedRed, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                Button { decideSamples(remove: false) } label: {
+                    Text("KEEP EXAMPLES")
+                        .font(ArchiveTheme.label(9))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(ArchiveTheme.ink)
+                        .background(.white.opacity(0.8), in: Capsule())
+                        .overlay { Capsule().stroke(ArchiveTheme.catalogGray.opacity(0.2), lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+            }
+            if let sampleError { Text(sampleError).font(.caption).foregroundStyle(.red) }
+            if decidingSamples { ProgressView("Saving…").font(.caption) }
+        }
+        .foregroundStyle(ArchiveTheme.ink)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ArchiveTheme.collectedRed.opacity(0.035), in: RoundedRectangle(cornerRadius: 18))
+        .overlay { RoundedRectangle(cornerRadius: 18).stroke(ArchiveTheme.collectedRed.opacity(0.16), lineWidth: 1) }
+        .disabled(decidingSamples)
+    }
+
+    private var sampleUndoNotice: some View {
+        HStack {
+            Text("Default examples removed").font(.caption)
+            Spacer()
+            Button("Undo") { store.undoSampleRemoval() }
+            Button { store.dismissSampleUndo() } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Dismiss undo")
+        }.padding(14)
+    }
+
+    private func decideSamples(remove: Bool) {
+        decidingSamples = true; sampleError = nil
+        Task { @MainActor in
+            defer { decidingSamples = false }
+            do { try await store.completeSampleChoice(remove: remove) }
+            catch { sampleError = error.localizedDescription }
         }
     }
 
@@ -105,7 +232,7 @@ struct CollectionView: View {
                     .foregroundStyle(ArchiveTheme.ink)
                     .tracking(1)
                 Spacer()
-                Text("04 COLLECTIONS")
+                Text("\(store.activeCollections.count) COLLECTIONS")
                     .font(ArchiveTheme.label(10))
                     .foregroundStyle(ArchiveTheme.catalogGray)
             }
@@ -289,3 +416,67 @@ private struct ArchivePlanView: View {
         }
     }
 }
+
+
+struct NewPersonalCollectionSheet: View {
+    @EnvironmentObject private var store: CollectionStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var layout: CollectionCategory = .poster
+    @State private var errorMessage: String?
+    var onCreated: (PersonalCollection) -> Void = { _ in }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Collection name") { TextField("e.g. Travel treasures", text: $name) }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            }
+            .navigationTitle("New Collection")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        do {
+                            let collection = try store.createPersonalCollection(name: name, layout: layout)
+                            onCreated(collection); dismiss()
+                        } catch { errorMessage = error.localizedDescription }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.catalogReady)
+                }
+            }
+        }
+        .environment(\.colorScheme, .light)
+        .tint(ArchiveTheme.collectedRed)
+    }
+}
+
+struct DeletedCollectionsSheet: View {
+    @EnvironmentObject private var store: CollectionStore
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            List {
+                if store.deletedCollections.isEmpty {
+                    Text("No deleted collections.")
+                } else {
+                    ForEach(store.deletedCollections) { collection in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(collection.name)
+                                Text("Objects and photos have been kept.").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Restore") { store.restorePersonalCollection(collection.id) }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Recently Deleted")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .environment(\.colorScheme, .light)
+        .tint(ArchiveTheme.collectedRed)
+    }
+}
+

@@ -15,6 +15,8 @@ struct CreateFlowView: View {
     @State private var showPhotoError = false
 
     @State private var selectedCategory: CollectionCategory?
+    @State private var selectedCollectionID: UUID?
+    @State private var showingNewCollection = false
     @State private var cropScale: CGFloat = 1
     @State private var cropOffset: CGSize = .zero
     @State private var cropCanvasSize: CGSize = .zero
@@ -56,6 +58,17 @@ struct CreateFlowView: View {
         }
         .foregroundStyle(ArchiveTheme.ink)
         .environment(\.colorScheme, .light)
+        .sheet(isPresented: $showingNewCollection) {
+            NewPersonalCollectionSheet { collection in selectedCollectionID = collection.id }
+        }
+        .onAppear {
+            if selectedCollectionID == nil { selectedCollectionID = store.onboardingPreferredCollectionID }
+        }
+        .onChange(of: selectedCollectionID) { _, id in
+            if let id, let collection = store.personalCollection(id: id), selectedCategory == nil {
+                selectedCategory = collection.layout
+            }
+        }
         .onChange(of: selectedPhoto) { _, newValue in
             loadPhoto(newValue)
         }
@@ -87,6 +100,17 @@ struct CreateFlowView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
                 pageHeader
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Save to collection", selection: $selectedCollectionID) {
+                        Text("Unfiled").tag(nil as UUID?)
+                        ForEach(store.activeCollections) { collection in
+                            Text(collection.name).tag(Optional(collection.id))
+                        }
+                    }
+                    Button("Create a custom collection") { showingNewCollection = true }
+                        .disabled(!store.catalogReady)
+                }
+                .font(ArchiveTheme.body(14))
 
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
                     VStack(spacing: 18) {
@@ -106,7 +130,7 @@ struct CreateFlowView: View {
                         VStack(spacing: 7) {
                             Text(sourceImage == nil ? "SELECT A PHOTO" : "CHOOSE A DIFFERENT PHOTO")
                                 .font(ArchiveTheme.heading(19))
-                            Text("Choose an image, then position it inside a category-specific mask.")
+                            Text("Choose an image, then choose its shape and position.")
                                 .font(ArchiveTheme.body(13))
                                 .foregroundStyle(ArchiveTheme.catalogGray)
                                 .multilineTextAlignment(.center)
@@ -148,7 +172,10 @@ struct CreateFlowView: View {
                 pageHeader
 
                 VStack(alignment: .leading, spacing: 12) {
-                    fieldLabel("CHOOSE A CATEGORY")
+                    fieldLabel("PHOTO SHAPE")
+                    Text("Saving to: " + (selectedCollectionID.flatMap { store.personalCollection(id: $0)?.name } ?? "Unfiled"))
+                        .font(ArchiveTheme.body(12))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
                     categoryGrid
                 }
                 .padding(16)
@@ -198,7 +225,7 @@ struct CreateFlowView: View {
                 .opacity(selectedCategory == nil || cropCanvasSize == .zero ? 0.45 : 1)
 
                 if selectedCategory == nil {
-                    Text("Please select a category before continuing.")
+                    Text("Please select a photo shape before continuing.")
                         .font(ArchiveTheme.body(12))
                         .foregroundStyle(ArchiveTheme.collectedRed)
                         .frame(maxWidth: .infinity)
@@ -206,6 +233,15 @@ struct CreateFlowView: View {
             }
             .padding(20)
             .padding(.bottom, 160)
+        }
+    }
+
+    private func photoShapeName(_ category: CollectionCategory) -> String {
+        switch category {
+        case .vinyl: return "Square"
+        case .bjd: return "Tall portrait"
+        case .poster: return "Portrait"
+        case .photocard: return "Card"
         }
     }
 
@@ -224,7 +260,7 @@ struct CreateFlowView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: category.systemImage)
-                        Text(category.title)
+                        Text(photoShapeName(category))
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                         Spacer(minLength: 0)
@@ -253,9 +289,9 @@ struct CreateFlowView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
-                        fieldLabel("COLLECTION TYPE")
+                        fieldLabel("COLLECTION")
                         Spacer()
-                        Text(selectedCategory?.title ?? "Not selected")
+                        Text(selectedCollectionID.flatMap { store.personalCollection(id: $0)?.name } ?? "Unfiled")
                             .font(ArchiveTheme.heading(13))
                     }
 
@@ -485,6 +521,7 @@ struct CreateFlowView: View {
 
         let item = CollectibleItem(
             title: cleanTitle,
+            collectionID: selectedCollectionID.flatMap { id in store.activeCollections.contains(where: { $0.id == id }) ? id : nil } ?? CollectionStore.unfiledCollectionID,
             creator: cleanCreator,
             year: includesYear ? year : nil,
             category: category,
@@ -505,6 +542,7 @@ struct CreateFlowView: View {
         )
 
         store.addItem(item)
+        store.onboardingPreferredCollectionID = nil
 
         if includesMemory {
             if let joinMomentID {
@@ -540,6 +578,7 @@ struct CreateFlowView: View {
         sourceImage = nil
         croppedImageData = nil
         selectedCategory = nil
+        selectedCollectionID = nil
         cropScale = 1
         cropOffset = .zero
         cropCanvasSize = .zero
