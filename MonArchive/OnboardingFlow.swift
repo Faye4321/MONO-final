@@ -833,8 +833,6 @@ private struct GuidedAppTourView: View {
     let onSkip: () -> Void
     @State private var page = 0
 
-    private let barHeight: CGFloat = 64
-
     private let items = [
         FeatureTourItem(tab: .explore, eyebrow: "01 · EXPLORE", title: "Start with what feels relevant.", body: "Discover picks worth adding, and revisit your collection journey month by month."),
         FeatureTourItem(
@@ -856,29 +854,15 @@ private struct GuidedAppTourView: View {
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let tabWidth = width / CGFloat(items.count)
-            let barTop = proxy.size.height - barHeight
             let insets = proxy.safeAreaInsets
-            // The tour draws its own tab bar over the system one, so the
-            // spotlight lines up exactly whatever style the system bar uses.
-            let target = CGRect(
-                x: tabWidth * CGFloat(page) + 4,
-                y: barTop + 4,
-                width: tabWidth - 8,
-                height: barHeight - 8
-            )
+            // The app's own MonoTabBar is visible underneath (RootTabView), and
+            // the spotlight uses the same slot geometry, so they always match.
+            let target = MonoTabBar.slotFrame(for: items[page].tab, in: proxy.size)
+            let barTop = target.minY - MonoTabBar.innerPadding
 
             ZStack {
                 RootTabView(selection: $selection)
                     .allowsHitTesting(false)
-
-                BrandColor.archiveIvory
-                    .frame(width: width, height: barHeight + insets.bottom)
-                    .position(x: width / 2, y: barTop + (barHeight + insets.bottom) / 2)
-
-                TourTabBar(tabs: items.map(\.tab), highlighted: items[page].tab)
-                    .frame(width: width, height: barHeight)
-                    .position(x: width / 2, y: barTop + barHeight / 2)
 
                 SpotlightDimmer(target: target, insets: insets)
 
@@ -962,7 +946,8 @@ private struct GuidedAppTourView: View {
 
                 Button {
                     Haptics.selection()
-                    selection = items[page].tab
+                    // Create isn't a page of its own; keep the previous tab behind it.
+                    if items[page].tab != .create { selection = items[page].tab }
                     if page == items.count - 1 {
                         onComplete()
                     } else {
@@ -981,44 +966,9 @@ private struct GuidedAppTourView: View {
             }
             .onAppear { selection = items[page].tab }
             .onChange(of: page) { _, newValue in
-                selection = items[newValue].tab
+                if items[newValue].tab != .create { selection = items[newValue].tab }
             }
         }
-    }
-}
-
-// The tab bar drawn during the tour, matching the app's tabs.
-private struct TourTabBar: View {
-    let tabs: [AppTab]
-    let highlighted: AppTab
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs, id: \.self) { tab in
-                Group {
-                    if tab == .create {
-                        CreateTabButton(isSelected: tab == highlighted)
-                    } else {
-                        VStack(spacing: 4) {
-                            Image(systemName: tab.systemImage)
-                                .font(.system(size: 19, weight: .medium))
-                            Text(tab.title)
-                                .monoLabel(8, tracking: 0.4)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .foregroundStyle(tab == highlighted ? BrandColor.collectedRed : BrandColor.inkBlack)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(BrandColor.inkBlack.opacity(0.08))
-                .frame(height: 1)
-        }
-        .accessibilityHidden(true)
     }
 }
 

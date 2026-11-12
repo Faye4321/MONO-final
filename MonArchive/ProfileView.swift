@@ -780,7 +780,7 @@ private struct ProfileSettingsView: View {
             } header: {
                 sectionHeader("ARCHIVE DATA")
             } footer: {
-                Text("Your objects and memories live only on this phone. Export a copy before switching devices; photos aren't included. CSV columns: title, category, creator, year, price, condition, rarity, meaning, note, date, place, place_type, with, memory_note.")
+                Text("Your objects, memories and photos sync to your account, so they're there when you sign in on another device. Export makes a JSON copy (photos aren't included). CSV columns: title, category, creator, year, price, condition, rarity, meaning, note, date, place, place_type, with, memory_note.")
                     .font(ArchiveTheme.body(11))
                     .foregroundStyle(ArchiveTheme.catalogGray)
             }

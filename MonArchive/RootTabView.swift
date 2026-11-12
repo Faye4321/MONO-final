@@ -11,59 +11,35 @@ struct RootTabView: View {
     @State private var purchaseMemory: Moment?
     @State private var showingCreate = false
 
-    /// The blank CREATE tab only reserves the middle slot. It is never
-    /// selected, so the system's liquid-glass selection pill never appears
-    /// behind the custom button; Create opens full screen instead.
-    private var tabSelection: Binding<AppTab> {
-        Binding(
-            get: { selection },
-            set: { newValue in
-                if newValue == .create { showingCreate = true } else { selection = newValue }
-            }
-        )
-    }
-
     var body: some View {
-        TabView(selection: tabSelection) {
+        // The system tab bar is hidden on every tab; MonoTabBar below replaces
+        // it so all five slots are exactly equal width (the system bar sizes
+        // items by label length) and the Create button sits in a real slot.
+        TabView(selection: $selection) {
             HomeView(
                 onProfileTapped: { selection = .me },
                 onOpenLab: { selection = .lab }
             )
-            .tabItem {
-                Label("EXPLORE", systemImage: "safari")
-            }
+            .toolbar(.hidden, for: .tabBar)
             .tag(AppTab.explore)
 
             CollectionView(onProfileTapped: { selection = .me })
-                .tabItem { Label("COLLECTION", systemImage: "rectangle.stack") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.collection)
 
-            // The visible CREATE control is the round button overlaid below;
-            // the system item stays blank so it doesn't show through.
-            Color.clear
-                .tabItem { Text("") }
-                .tag(AppTab.create)
-
             LabRootView(collectionProvider: ArchiveLabCollectionProvider(items: store.activeItems))
-                .tabItem { Label("LAB", systemImage: "wand.and.stars") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.lab)
 
             ProfileView()
-                .tabItem {
-                    Label("ME", systemImage: "person")
-                }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.me)
         }
         .tint(ArchiveTheme.collectedRed)
-        .overlay(alignment: .bottom) {
-            Button {
-                showingCreate = true
-            } label: {
-                CreateTabButton()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MonoTabBar(selection: selection) { tab in
+                if tab == .create { showingCreate = true } else { selection = tab }
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, CreateTabButton.bottomPadding)
-            .accessibilityLabel("Create")
         }
         .fullScreenCover(isPresented: $showingCreate) {
             CreateFlowView(
@@ -135,14 +111,11 @@ enum AppTab: Hashable, CaseIterable {
     }
 }
 
-// Emphasised, inverted CREATE control centred on the tab bar.
+// Emphasised, inverted CREATE control in the middle slot of the tab bar.
 struct CreateTabButton: View {
     var isSelected = false
 
     static let diameter: CGFloat = 46
-    /// Negative nudges the button down so it sits on the vertical centre of
-    /// the floating tab bar rather than on the safe-area edge.
-    static let bottomPadding: CGFloat = -5
 
     var body: some View {
         Image(systemName: "plus")
@@ -151,6 +124,107 @@ struct CreateTabButton: View {
             .frame(width: Self.diameter, height: Self.diameter)
             .background(isSelected ? ArchiveTheme.collectedRed : ArchiveTheme.ink, in: Circle())
             .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+    }
+}
+
+/// The app's floating tab bar: five strictly equal slots on liquid glass.
+/// The onboarding tour draws this same view and uses `slotFrame` to place
+/// its spotlight, so both always line up.
+struct MonoTabBar: View {
+    static let tabs: [AppTab] = [.explore, .collection, .create, .lab, .me]
+    static let height: CGFloat = 62
+    static let horizontalMargin: CGFloat = 20
+    /// How far the bar sits into the home-indicator area, matching where the
+    /// system iOS 26 tab bar sits.
+    static let bottomOffset: CGFloat = 12
+    static let innerPadding: CGFloat = 4
+
+    let selection: AppTab
+    var onSelect: (AppTab) -> Void = { _ in }
+
+    @Namespace private var pill
+
+    /// The rect of a tab's slot, in the coordinate space of a container whose
+    /// size is `container` and whose bottom edge is the bar's safe-area edge.
+    static func slotFrame(for tab: AppTab, in container: CGSize) -> CGRect {
+        let index = CGFloat(tabs.firstIndex(of: tab) ?? 0)
+        let barWidth = container.width - horizontalMargin * 2
+        let slotWidth = (barWidth - innerPadding * 2) / CGFloat(tabs.count)
+        let barTop = container.height + bottomOffset - height
+        return CGRect(
+            x: horizontalMargin + innerPadding + slotWidth * index,
+            y: barTop + innerPadding,
+            width: slotWidth,
+            height: height - innerPadding * 2
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Self.tabs, id: \.self) { tab in
+                Button {
+                    Haptics.selection()
+                    onSelect(tab)
+                } label: {
+                    slot(tab)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab == .create ? "Create" : tab.title.capitalized)
+                .accessibilityAddTraits(tab == selection ? .isSelected : [])
+            }
+        }
+        .padding(Self.innerPadding)
+        .frame(height: Self.height)
+        .background { glass }
+        .padding(.horizontal, Self.horizontalMargin)
+        .offset(y: Self.bottomOffset)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selection)
+    }
+
+    @ViewBuilder
+    private func slot(_ tab: AppTab) -> some View {
+        if tab == .create {
+            CreateTabButton()
+        } else {
+            let isSelected = tab == selection
+            VStack(spacing: 3) {
+                Image(systemName: tab.systemImage)
+                    .symbolVariant(.fill)
+                    .font(.system(size: 19, weight: .medium))
+                    .frame(height: 24)
+                Text(tab.title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(isSelected ? ArchiveTheme.collectedRed : ArchiveTheme.ink)
+            .padding(.horizontal, 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(ArchiveTheme.ink.opacity(0.07))
+                        .matchedGeometryEffect(id: "selection", in: pill)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var glass: some View {
+        if #available(iOS 26.0, *) {
+            Capsule()
+                .fill(.clear)
+                .glassEffect(.regular, in: Capsule())
+                .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
+        } else {
+            Capsule()
+                .fill(.regularMaterial)
+                .overlay { Capsule().stroke(.white.opacity(0.6), lineWidth: 1) }
+                .shadow(color: .black.opacity(0.1), radius: 16, y: 6)
+        }
     }
 }
 
