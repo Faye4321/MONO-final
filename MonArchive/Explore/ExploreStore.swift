@@ -8,6 +8,7 @@ enum ExploreLoadState: Equatable {
 }
 
 struct ExploreFeedback {
+    let id = UUID()
     let message: String
     let removedPick: ShopPick?
 }

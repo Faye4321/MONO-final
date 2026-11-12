@@ -608,8 +608,8 @@ struct CalendarStack: View {
 
 // MARK: - Full-Screen Flip View
 
-// The calendar opened full screen: one month per page, flipped vertically,
-// with neighbouring months peeking above and below.
+// The calendar opened full screen: one month per page, swiped left and right
+// (matching the page dots), opening on the month it was asked for.
 struct CalendarFlipView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -617,53 +617,44 @@ struct CalendarFlipView: View {
     let pages: [CalendarPage]
     @Binding var focusedIndex: Int
 
-    @State private var currentID: CalendarPage.ID?
+    @State private var currentIndex: Int
     @State private var highlightedDays: [CalendarPage.ID: Int] = [:]
     @State private var selectedMoment: Moment?
 
-    init(pages: [CalendarPage], focusedIndex: Binding<Int>) {
+    /// `startIndex` is the month to open on. Pass it as a value: reading the
+    /// binding while a full-screen cover builds its content returns a stale 0.
+    init(pages: [CalendarPage], focusedIndex: Binding<Int>, startIndex: Int? = nil) {
         self.pages = pages
         _focusedIndex = focusedIndex
-        let start = pages.indices.contains(focusedIndex.wrappedValue) ? focusedIndex.wrappedValue : 0
-        _currentID = State(initialValue: pages.isEmpty ? nil : pages[start].id)
-    }
-
-    private var currentIndex: Int {
-        pages.firstIndex { $0.id == currentID } ?? 0
+        let requested = startIndex ?? focusedIndex.wrappedValue
+        let start = pages.indices.contains(requested) ? requested : 0
+        _currentIndex = State(initialValue: start)
     }
 
     var body: some View {
         GeometryReader { proxy in
             let cardHeight = proxy.size.height * 0.8
 
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) {
-                    ForEach(pages) { page in
-                        MonthCard(
-                            page: page,
-                            expanded: true,
-                            highlightedDay: highlightedDays[page.id],
-                            onTapDay: { day in
-                                highlightedDays[page.id] = highlightedDays[page.id] == day ? nil : day
-                            },
-                            onTapMoment: { selectedMoment = $0 }
-                        )
-                        .frame(height: cardHeight)
-                        .padding(.horizontal, 20)
-                        .containerRelativeFrame(.vertical)
-                        .scrollTransition(axis: .vertical) { [reduceMotion] content, phase in
-                            content
-                                .scaleEffect(phase.isIdentity || reduceMotion ? 1 : 0.9)
-                                .offset(y: reduceMotion ? 0 : phase.value * -60)
-                                .opacity(phase.isIdentity ? 1 : 0.75)
-                        }
-                    }
+            // A paged TabView swipes left/right and, unlike a lazy
+            // ScrollView, reliably opens on the requested month.
+            TabView(selection: $currentIndex) {
+                ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                    MonthCard(
+                        page: page,
+                        expanded: true,
+                        highlightedDay: highlightedDays[page.id],
+                        onTapDay: { day in
+                            highlightedDays[page.id] = highlightedDays[page.id] == day ? nil : day
+                        },
+                        onTapMoment: { selectedMoment = $0 }
+                    )
+                    .frame(height: cardHeight)
+                    .padding(.horizontal, 20)
+                    .frame(maxHeight: .infinity)
+                    .tag(index)
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $currentID)
-            .scrollIndicators(.hidden)
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
         .background(Color(hex: "ECEADB").ignoresSafeArea())
         .overlay(alignment: .top) {
@@ -701,7 +692,7 @@ struct CalendarFlipView: View {
             .padding(.bottom, 6)
             .accessibilityHidden(true)
         }
-        .onChange(of: currentID) {
+        .onChange(of: currentIndex) {
             Haptics.selection()
             focusedIndex = currentIndex
         }

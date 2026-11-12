@@ -22,17 +22,32 @@ struct OptionalOptionPicker<Option: TitledOption>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             MemoryFieldLabel(label)
-            Picker(label, selection: $selection) {
-                Text("Not set").tag(Option?.none)
-                ForEach(Option.allCases) { option in
-                    Text(option.title).tag(Option?.some(option))
+            // A Menu with our own label: a bare menu Picker on iOS 26 repeats
+            // the field name inside the button and wraps in narrow columns.
+            Menu {
+                Picker(label, selection: $selection) {
+                    Text("Not set").tag(Option?.none)
+                    ForEach(Option.allCases) { option in
+                        Text(option.title).tag(Option?.some(option))
+                    }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selection?.title ?? "Not set")
+                        .font(ArchiveTheme.body(14))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(ArchiveTheme.ink)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                .background(ArchiveTheme.ivory, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
             }
-            .pickerStyle(.menu)
-            .tint(ArchiveTheme.ink)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 6)
-            .background(ArchiveTheme.ivory, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityLabel(label)
+            .accessibilityValue(selection?.title ?? "Not set")
         }
     }
 }

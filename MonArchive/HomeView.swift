@@ -54,7 +54,13 @@ struct HomeView: View {
                 .toolbar(.hidden, for: .navigationBar)
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { ExploreFeedbackBar() }
+        // Floats above the tab bar instead of a full-width strip under it.
+        .overlay(alignment: .bottom) {
+            ExploreFeedbackBar()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .animation(.easeInOut(duration: 0.25), value: explore.feedback?.id)
+        }
         .environmentObject(explore)
         .tint(BrandColor.collectedRed)
         .task { await explore.loadIfNeeded() }
@@ -257,8 +263,13 @@ private struct HomeJourneySection: View {
     @State private var year = Calendar.current.component(.year, from: .now)
     @State private var focusedIndex = 0
     @State private var hasPositioned = false
-    @State private var showingFlip = false
+    @State private var flip: FlipRequest?
     @State private var selectedMoment: Moment?
+
+    private struct FlipRequest: Identifiable {
+        let id = UUID()
+        let startIndex: Int
+    }
 
     private var years: [Int] {
         MemoryCalendar.years(in: store.calendarSource)
@@ -305,7 +316,7 @@ private struct HomeJourneySection: View {
             CalendarStack(
                 pages: pages,
                 focusedIndex: $focusedIndex,
-                onOpen: { showingFlip = true },
+                onOpen: { flip = FlipRequest(startIndex: focusedIndex) },
                 onTapMoment: { selectedMoment = $0 }
             )
             .padding(.top, 18)
@@ -324,8 +335,8 @@ private struct HomeJourneySection: View {
         .sheet(item: $selectedMoment) { moment in
             MomentObjectsSheet(moment: moment)
         }
-        .fullScreenCover(isPresented: $showingFlip) {
-            CalendarFlipView(pages: pages, focusedIndex: $focusedIndex)
+        .fullScreenCover(item: $flip) { request in
+            CalendarFlipView(pages: pages, focusedIndex: $focusedIndex, startIndex: request.startIndex)
         }
     }
 

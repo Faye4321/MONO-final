@@ -38,6 +38,12 @@ struct CloudAccountPanel: View {
     @State private var joining = false
     @State private var confirmImport = false
 
+    private var needsRetry: Bool {
+        store.cloudStatus != "Up to date"
+            || store.cloudError != nil || store.catalogError != nil
+            || profileStore.errorMessage != nil || socialStore.cloudError != nil
+    }
+
     var body: some View {
         DisclosureGroup("Cloud & shared collections") {
             VStack(alignment: .leading, spacing: 12) {
@@ -59,9 +65,12 @@ struct CloudAccountPanel: View {
                 if let error = store.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
                 if let error = socialStore.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
                 if socialStore.cloudBusy { ProgressView("Creating collection…") }
-                Button("Retry sync") {
-                    store.retryCloudSync()
-                    profileStore.retry()
+                // Only offer a retry when something is actually waiting or failed.
+                if needsRetry {
+                    Button("Retry sync") {
+                        store.retryCloudSync()
+                        profileStore.retry()
+                    }
                 }
                 if store.hasLegacyArchive {
                     Button("Import collections from before this update") { confirmImport = true }

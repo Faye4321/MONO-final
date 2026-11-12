@@ -198,10 +198,17 @@ struct ExploreFeedbackBar: View {
                 .font(.subheadline).buttonStyle(.plain)
                 .frame(minHeight: 44)
             }
-            .padding(.horizontal, 18).padding(.top, 12)
+            .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 4)
             .foregroundStyle(BrandColor.archiveIvory)
-            .background(BrandColor.inkBlack)
+            .background(BrandColor.inkBlack, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityIdentifier("explore.feedback")
+            .task(id: feedback.id) {
+                // Goes away on its own (long enough to reach Undo).
+                try? await Task.sleep(for: .seconds(5))
+                if explore.feedback?.id == feedback.id { explore.feedback = nil }
+            }
         }
     }
 }

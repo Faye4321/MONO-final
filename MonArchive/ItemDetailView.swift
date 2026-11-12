@@ -147,7 +147,7 @@ struct ItemDetailView: View {
         // Carry the pages in the presentation itself; separate @State
         // set in the same tap can reach the cover still empty.
         .fullScreenCover(item: $journey) { journey in
-            CalendarFlipView(pages: journey.pages, focusedIndex: $journeyIndex)
+            CalendarFlipView(pages: journey.pages, focusedIndex: $journeyIndex, startIndex: journey.startIndex)
         }
     }
 
@@ -168,7 +168,7 @@ struct ItemDetailView: View {
         journeyIndex = entry.flatMap { entry in
             pages.firstIndex { page in page.moments.contains { $0.id == entry.id } }
         } ?? MemoryCalendar.defaultIndex(in: pages)
-        journey = JourneyPresentation(pages: pages)
+        journey = JourneyPresentation(pages: pages, startIndex: journeyIndex)
     }
 
     // MARK: - Standard Data
@@ -312,6 +312,7 @@ struct ItemDetailView: View {
 private struct JourneyPresentation: Identifiable {
     let id = UUID()
     let pages: [CalendarPage]
+    let startIndex: Int
 }
 
 // MARK: - Edit Object

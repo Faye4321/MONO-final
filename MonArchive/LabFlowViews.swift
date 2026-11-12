@@ -289,11 +289,16 @@ struct LabCollectionPickerView: View {
                             Haptics.selection()
                         } label: {
                             VStack(alignment: .leading, spacing: 10) {
-                                Image(uiImage: item.image)
-                                    .resizable()
-                                    .scaledToFill()
+                                // Fixed-size slot so wide photos can't push the card
+                                // past its grid column.
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
                                     .frame(height: 190)
-                                    .clipped()
+                                    .overlay {
+                                        Image(uiImage: item.image)
+                                            .resizable()
+                                            .scaledToFill()
+                                    }
                                     .clipShape(RoundedRectangle(cornerRadius: 18))
                                 Text(item.name).monoHeading(15).lineLimit(1)
                                 Text("\(item.maker) · \(item.year)")
@@ -596,7 +601,11 @@ private struct LabProjectThumbnail: View {
     let project: LabProject
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Lay the canvas out at a phone-sized reference and scale it
+            // down, so text keeps the proportions it has in the editor.
             LabExportCanvasView(project: project, transparent: false)
+                .frame(width: 375, height: 450)
+                .scaleEffect(150 / 375)
                 .frame(width: 150, height: 180)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
             Text(project.title).monoHeading(13).lineLimit(1)

@@ -1,3 +1,4 @@
+import FirebaseAuth
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -701,6 +702,8 @@ private struct ProfileSettingsView: View {
     @State private var linkCopied = false
     @State private var importingCSV = false
     @State private var importMessage: String?
+    @State private var confirmingSignOut = false
+    @State private var signOutError: String?
     @AppStorage(Haptics.settingKey) private var hapticsEnabled = true
     @AppStorage(AppTourReplay.key) private var replayTourRequested = false
 
@@ -793,7 +796,35 @@ private struct ProfileSettingsView: View {
             } header: {
                 sectionHeader("ABOUT")
             }
+
+            Section {
+                Button(role: .destructive) {
+                    confirmingSignOut = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: 16))
+                            .frame(width: 24)
+                        Text("Sign out")
+                            .font(ArchiveTheme.body(15))
+                    }
+                    .foregroundStyle(ArchiveTheme.collectedRed)
+                    .contentShape(Rectangle())
+                }
+            }
         }
+        .confirmationDialog("Sign out of MONO?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) {
+                do { try Auth.auth().signOut() }
+                catch { signOutError = error.localizedDescription }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Couldn't sign out", isPresented: Binding(
+            get: { signOutError != nil }, set: { if !$0 { signOutError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(signOutError ?? "") }
         .scrollContentBackground(.hidden)
         .background(ArchiveTheme.ivory.ignoresSafeArea())
         .tint(ArchiveTheme.ink)
