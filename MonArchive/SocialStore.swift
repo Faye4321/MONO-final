@@ -17,62 +17,14 @@ final class SocialStore: ObservableObject {
     @Published var conversations: [ChatConversation]
     @Published var messages: [ChatMessage]
 
+    /// Collectors the user has sent a friend request to (local only for now).
+    @Published private(set) var sentRequestIDs: Set<UUID> = []
+
     init() {
-        let mina = SocialUser(
-            id: DemoSocialIDs.mina,
-            name: "Mina Park",
-            handle: "@minashelf",
-            location: "Los Angeles",
-            bio: "Analog sound, tiny paper treasures, and the stories behind both.",
-            interests: [.vinyl, .photocard],
-            objectCount: 64,
-            collectionCount: 5,
-            sharedCollectionCount: 7,
-            avatarColorA: "D5B99C",
-            avatarColorB: "B84631"
-        )
-
-        let alex = SocialUser(
-            id: DemoSocialIDs.alex,
-            name: "Alex Rivera",
-            handle: "@posterarchive",
-            location: "Los Angeles",
-            bio: "Collecting movie posters and visual memories.",
-            interests: [.poster],
-            objectCount: 38,
-            collectionCount: 3,
-            sharedCollectionCount: 4,
-            avatarColorA: "727B70",
-            avatarColorB: "262624"
-        )
-
-        let yuki = SocialUser(
-            id: DemoSocialIDs.yuki,
-            name: "Yuki Sato",
-            handle: "@yukicollects",
-            location: "Tokyo",
-            bio: "BJD, vinyl, and carefully preserved objects.",
-            interests: [.bjd, .vinyl],
-            objectCount: 51,
-            collectionCount: 4,
-            sharedCollectionCount: 2,
-            avatarColorA: "C8B7A8",
-            avatarColorB: "706B63"
-        )
-
-        let jamie = SocialUser(
-            id: DemoSocialIDs.jamie,
-            name: "Jamie Chen",
-            handle: "@jamiearchive",
-            location: "New York",
-            bio: "Photocards and music ephemera.",
-            interests: [.photocard, .vinyl],
-            objectCount: 29,
-            collectionCount: 2,
-            sharedCollectionCount: 1,
-            avatarColorA: "D9D1C3",
-            avatarColorB: "727B70"
-        )
+        let mina = DemoCollectors.mina
+        let alex = DemoCollectors.alex
+        let yuki = DemoCollectors.yuki
+        let jamie = DemoCollectors.jamie
 
         friends = [mina, alex, yuki]
 
@@ -342,6 +294,7 @@ final class SocialStore: ObservableObject {
             ?? friendRequests
                 .map(\.sender)
                 .first { $0.id == id }
+            ?? DemoCollectors.all.first { $0.id == id }
     }
 
     func members(
@@ -353,6 +306,28 @@ final class SocialStore: ObservableObject {
     }
 
     // MARK: - Friend Requests
+
+    func isFriend(_ userID: UUID) -> Bool {
+        friends.contains { $0.id == userID }
+    }
+
+    func incomingRequest(from userID: UUID) -> FriendRequest? {
+        friendRequests.first { $0.sender.id == userID }
+    }
+
+    func hasSentRequest(to userID: UUID) -> Bool {
+        sentRequestIDs.contains(userID)
+    }
+
+    // TODO(Fei): replace with the Firebase friend-request call.
+    func sendFriendRequest(to user: SocialUser) {
+        guard isFriend(user.id) == false else { return }
+        sentRequestIDs.insert(user.id)
+    }
+
+    func cancelFriendRequest(to user: SocialUser) {
+        sentRequestIDs.remove(user.id)
+    }
 
     func acceptFriendRequest(_ request: FriendRequest) {
         if friends.contains(where: { $0.id == request.sender.id }) == false {
@@ -543,6 +518,115 @@ final class SocialStore: ObservableObject {
     }
 }
 
+// MARK: - Demo Collectors
+
+/// Demo users shared by `SocialStore` and the local handle search,
+/// so search results and friends refer to the same people.
+enum DemoCollectors {
+    static let mina = SocialUser(
+        id: DemoSocialIDs.mina,
+        name: "Mina Park",
+        handle: "@minashelf",
+        location: "Los Angeles",
+        bio: "Analog sound, tiny paper treasures, and the stories behind both.",
+        interests: [.vinyl, .photocard],
+        objectCount: 64,
+        collectionCount: 5,
+        sharedCollectionCount: 7,
+        avatarColorA: "D5B99C",
+        avatarColorB: "B84631"
+    )
+
+    static let alex = SocialUser(
+        id: DemoSocialIDs.alex,
+        name: "Alex Rivera",
+        handle: "@posterarchive",
+        location: "Los Angeles",
+        bio: "Collecting movie posters and visual memories.",
+        interests: [.poster],
+        objectCount: 38,
+        collectionCount: 3,
+        sharedCollectionCount: 4,
+        avatarColorA: "727B70",
+        avatarColorB: "262624"
+    )
+
+    static let yuki = SocialUser(
+        id: DemoSocialIDs.yuki,
+        name: "Yuki Sato",
+        handle: "@yukicollects",
+        location: "Tokyo",
+        bio: "BJD, vinyl, and carefully preserved objects.",
+        interests: [.bjd, .vinyl],
+        objectCount: 51,
+        collectionCount: 4,
+        sharedCollectionCount: 2,
+        avatarColorA: "C8B7A8",
+        avatarColorB: "706B63"
+    )
+
+    static let jamie = SocialUser(
+        id: DemoSocialIDs.jamie,
+        name: "Jamie Chen",
+        handle: "@jamiearchive",
+        location: "New York",
+        bio: "Photocards and music ephemera.",
+        interests: [.photocard, .vinyl],
+        objectCount: 29,
+        collectionCount: 2,
+        sharedCollectionCount: 1,
+        avatarColorA: "D9D1C3",
+        avatarColorB: "727B70"
+    )
+
+    /// Collectors who are not connected to the user yet.
+    static let others: [SocialUser] = [
+        SocialUser(
+            id: DemoSocialIDs.noor,
+            name: "Noor Haddad",
+            handle: "@noorkeeps",
+            location: "Chicago",
+            bio: "Film posters, ticket stubs, and the songs from those nights.",
+            interests: [.poster, .vinyl],
+            objectCount: 47,
+            collectionCount: 4,
+            sharedCollectionCount: 1,
+            avatarColorA: "B84631",
+            avatarColorB: "262624"
+        ),
+        SocialUser(
+            id: DemoSocialIDs.leo,
+            name: "Leo Tanaka",
+            handle: "@leo.dolls",
+            location: "Osaka",
+            bio: "Dollfie Dream and SD girls, photographed in good light.",
+            interests: [.bjd],
+            objectCount: 22,
+            collectionCount: 2,
+            sharedCollectionCount: 0,
+            avatarColorA: "A68E9A",
+            avatarColorB: "706B63"
+        ),
+        SocialUser(
+            id: DemoSocialIDs.sofia,
+            name: "Sofia Marin",
+            handle: "@sofia_spins",
+            location: "Seattle",
+            bio: "City pop on vinyl and a binder of photocards.",
+            interests: [.vinyl, .photocard],
+            objectCount: 73,
+            collectionCount: 5,
+            sharedCollectionCount: 3,
+            avatarColorA: "536D78",
+            avatarColorB: "D5B99C"
+        )
+    ]
+
+    static var all: [SocialUser] {
+        [mina, alex, yuki, jamie] + others
+    }
+}
+
 // MARK: - Stable Demo IDs
 
 private enum DemoSocialIDs {
@@ -564,6 +648,18 @@ private enum DemoSocialIDs {
 
     static let jamie = UUID(
         uuidString: "20000000-0000-0000-0000-000000000004"
+    )!
+
+    static let noor = UUID(
+        uuidString: "20000000-0000-0000-0000-000000000005"
+    )!
+
+    static let leo = UUID(
+        uuidString: "20000000-0000-0000-0000-000000000006"
+    )!
+
+    static let sofia = UUID(
+        uuidString: "20000000-0000-0000-0000-000000000007"
     )!
 
     static let jamieRequest = UUID(

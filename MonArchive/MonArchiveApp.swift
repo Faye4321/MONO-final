@@ -31,6 +31,7 @@ struct MonArchiveApp: App {
                 .environmentObject(profileStore)
                 .task {
                     profileStore.startCloud()
+                    ProfileStore.shared.connect(cloud: profileStore)
                     store.startCloud()
                     socialStore.startCloud(collectionStore: store)
                 }

@@ -211,10 +211,17 @@ final class CloudProfileStore: ObservableObject {
             }
     }
 
+    /// Points the store at the signed-in account right away, without waiting
+    /// for the auth listener (used straight after sign-up).
+    func activateCurrentUserIfNeeded() {
+        guard let current = FirebaseAuth.Auth.auth().currentUser?.uid, uid != current else { return }
+        activate(current)
+    }
+
     /// Called only for a newly registered account, not a returning login.
     func registerName(_ name: String) {
         guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
-        if self.uid != uid { activate(uid) }
+        activateCurrentUserIfNeeded()
         var value = profile
         value.name = name
         Task { @MainActor in

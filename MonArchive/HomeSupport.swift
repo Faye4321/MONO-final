@@ -134,13 +134,28 @@ extension View {
 // MARK: - Haptics
 
 enum Haptics {
+    /// Settings ▸ Haptics. On unless the user turns it off.
+    static let settingKey = "settings.hapticsEnabled"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true
+    }
+
     static func selection() {
+        guard isEnabled else { return }
         UISelectionFeedbackGenerator()
             .selectionChanged()
     }
 
     static func light() {
+        guard isEnabled else { return }
         UIImpactFeedbackGenerator(style: .light)
             .impactOccurred()
+    }
+
+    static func success() {
+        guard isEnabled else { return }
+        UINotificationFeedbackGenerator()
+            .notificationOccurred(.success)
     }
 }
