@@ -121,7 +121,9 @@ struct CreateTabButton: View {
     var isSelected = false
 
     static let diameter: CGFloat = 46
-    static let bottomPadding: CGFloat = 0
+    /// Negative nudges the button down so it sits on the vertical centre of
+    /// the floating tab bar rather than on the safe-area edge.
+    static let bottomPadding: CGFloat = -5
 
     var body: some View {
         Image(systemName: "plus")
