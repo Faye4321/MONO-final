@@ -4,6 +4,16 @@ import UIKit
 struct ShelfDetailView: View {
     @EnvironmentObject private var store: CollectionStore
     let category: CollectionCategory
+    var collectionID: UUID? = nil
+    var showsUnfiled = false
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingCollectionDelete = false
+
+    private var shelfID: UUID { collectionID ?? PersonalCollection.defaultID(for: category) }
+    private var collection: PersonalCollection? { store.personalCollection(id: shelfID) }
+    private var shelfItems: [CollectibleItem] {
+        showsUnfiled ? store.unfiledItems : store.items(in: shelfID)
+    }
     @State private var itemPendingDeletion: CollectibleItem?
 
     var body: some View {
@@ -22,6 +32,21 @@ struct ShelfDetailView: View {
         .environment(\.colorScheme, .light)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(background, for: .navigationBar)
+        .toolbar {
+            if !showsUnfiled, collection?.deletedAt == nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Delete Collection", role: .destructive) { confirmingCollectionDelete = true }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                }
+            }
+        }
+        .confirmationDialog("Delete this collection?", isPresented: $confirmingCollectionDelete, titleVisibility: .visible) {
+            Button("Delete Collection", role: .destructive) { store.deletePersonalCollection(shelfID); dismiss() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Objects and photos stay in Unfiled. You can restore the collection from Recently deleted.")
+        }
         .confirmationDialog(
             "Delete this item?",
             isPresented: Binding(
@@ -52,13 +77,13 @@ struct ShelfDetailView: View {
 
     private var shelfHeader: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(category.title)
+            Text(showsUnfiled ? "Unfiled" : (collection?.name ?? category.title))
                 .font(ArchiveTheme.display(30))
                 .foregroundStyle(foreground)
             HStack {
-                Text(category.shelfLabel)
+                Text(showsUnfiled ? "OBJECTS WITHOUT A COLLECTION" : (shelfItems.isEmpty ? "COLLECTION" : category.shelfLabel))
                 Spacer()
-                Text("\(store.count(for: category)) OBJECTS")
+                Text("\(shelfItems.count) OBJECTS")
                     .foregroundStyle(ArchiveTheme.collectedRed)
             }
             .font(ArchiveTheme.label(10))
@@ -70,8 +95,13 @@ struct ShelfDetailView: View {
 
     @ViewBuilder
     private var shelfContent: some View {
-        let items = store.items(for: category)
-        if items.isEmpty {
+        let items = shelfItems
+        if !showsUnfiled, collection?.deletedAt != nil {
+            VStack(spacing: 16) {
+                Text("This collection is in Recently deleted. Its objects are safe in Unfiled.")
+                Button("Restore Collection") { store.restorePersonalCollection(shelfID) }
+            }
+        } else if items.isEmpty {
             EmptyShelfView(category: category)
         } else {
             switch category {
@@ -300,13 +330,11 @@ private struct PosterWallView: View {
                                 .clipped()
                         }
                             .aspectRatio(0.68, contentMode: .fit)
-                            .contrast(1.2)
-                            .saturation(0.88)
                             .padding(7)
-                            .background(ArchiveTheme.ink)
+                            .background(ArchiveTheme.ivory)
                             .padding(3)
-                            .background(Color(hex: "3A3732"))
-                            .shadow(color: .black.opacity(0.32), radius: 7, y: 4)
+                            .background(ArchiveTheme.paperTan)
+                            .shadow(color: .black.opacity(0.12), radius: 5, y: 3)
                         ShelfObjectName(title: item.title)
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -335,7 +363,7 @@ private struct PhotocardBinderView: View {
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 15) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 15) {
             ForEach(items) { item in
                 NavigationLink {
                     ItemDetailView(item: item)
@@ -403,8 +431,8 @@ private struct EmptyShelfView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: category.systemImage)
-                .font(.system(size: 30, weight: .light))
+            EmptyCollectionDisplayShelf(category: category)
+                .frame(height: 240)
             Text("THIS SHELF IS WAITING")
                 .font(ArchiveTheme.heading(16))
             Text("Objects saved from the Create flow will appear here.")
@@ -413,7 +441,7 @@ private struct EmptyShelfView: View {
                 .foregroundStyle(ArchiveTheme.catalogGray)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 70)
+        .padding(18)
         .background(.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 20))
     }
 }

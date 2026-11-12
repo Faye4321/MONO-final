@@ -327,6 +327,7 @@ struct ItemEditSheet: View {
     @State private var includesYear: Bool
     @State private var year: Int
     @State private var category: CollectionCategory
+    @State private var destinationCollectionID: UUID?
     @State private var priceText: String
     @State private var condition: ItemCondition?
     @State private var rarity: Rarity?
@@ -344,6 +345,7 @@ struct ItemEditSheet: View {
         _includesYear = State(initialValue: item.year != nil)
         _year = State(initialValue: item.year ?? Calendar.current.component(.year, from: .now))
         _category = State(initialValue: item.category)
+        _destinationCollectionID = State(initialValue: item.collectionID ?? PersonalCollection.defaultID(for: item.category))
         _priceText = State(initialValue: PriceText.format(item.pricePaid))
         _condition = State(initialValue: item.condition)
         _rarity = State(initialValue: item.rarity)
@@ -362,7 +364,18 @@ struct ItemEditSheet: View {
                         MemoryTextField(label: "OBJECT TITLE", placeholder: "Untitled object", text: $title)
                         MemoryTextField(label: "CREATOR / ARTIST / BRAND", placeholder: "Creator", text: $creator)
 
-                        Picker("Collection Type", selection: $category) {
+                        Picker("Collection", selection: $destinationCollectionID) {
+                            Text("Unfiled").tag(nil as UUID?)
+                            ForEach(store.activeCollections) { collection in
+                                Text(collection.name).tag(Optional(collection.id))
+                            }
+                            if let id = destinationCollectionID, !store.activeCollections.contains(where: { $0.id == id }) {
+                                Text("Unfiled (former collection)").tag(Optional(id))
+                            }
+                        }
+                        .tint(ArchiveTheme.ink)
+
+                        Picker("Object format", selection: $category) {
                             ForEach(CollectionCategory.allCases) { category in
                                 Text(category.title).tag(category)
                             }
@@ -458,6 +471,7 @@ struct ItemEditSheet: View {
         updated.creator = creator.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.year = includesYear ? year : nil
         updated.category = category
+        updated.collectionID = destinationCollectionID ?? CollectionStore.unfiledCollectionID
         updated.pricePaid = PriceText.parse(priceText)
         updated.condition = condition
         updated.rarity = rarity
