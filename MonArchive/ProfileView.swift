@@ -218,19 +218,11 @@ struct ProfileView: View {
                         showingEditProfile = true
                     } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Text(profile.name.isEmpty ? "Add your name" : profile.name)
-                                .font(ArchiveTheme.heading(21))
-                                .foregroundStyle(profile.name.isEmpty ? ArchiveTheme.catalogGray : ArchiveTheme.ink)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-
-                            Image(systemName: "pencil")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(ArchiveTheme.ink)
-                                .frame(width: 26, height: 26)
-                                .background(ArchiveTheme.ivory, in: Circle())
-                        }
+                        Text(profile.name.isEmpty ? "Add your name" : profile.name)
+                            .font(ArchiveTheme.heading(21))
+                            .foregroundStyle(profile.name.isEmpty ? ArchiveTheme.catalogGray : ArchiveTheme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
 
                         Text(subtitle.isEmpty ? "Add a handle so friends can find you" : subtitle)
                             .font(ArchiveTheme.body(12))
