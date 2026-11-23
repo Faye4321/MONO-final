@@ -13,6 +13,60 @@ service cloud.firestore {
     match /users/{uid}/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
+    // ---- Friends and collector directory (Gladys) ----
+    function validHandle(h) {
+      return h is string && h.matches('^[a-z0-9._]{3,20}$') && !h.matches('^[.].*|.*[.]$');
+    }
+    // Public profile: anyone signed in can read it; only the owner writes it.
+    // No email or other private fields are allowed in the document.
+    match /profiles/{uid} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 20;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'handle', 'bio', 'location',
+             'objectCount', 'collectionCount', 'publicCollections', 'updatedAt'])
+        && validHandle(request.resource.data.handle)
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 2000
+        // The handle in the profile must belong to this user (checked after the batch).
+        && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.handle)).data.uid == request.auth.uid;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+    // One owner per handle. Changing handle = create the new one, delete the old one.
+    match /handles/{handle} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && validHandle(handle)
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    // One document per pair (id = smallerUID_largerUID), so a pair can't have two
+    // relationships and a repeated request fails. Only the receiver can accept;
+    // either person can delete (decline, cancel, unfriend).
+    match /friendships/{pair} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
+      allow create: if signedIn()
+        && request.resource.data.fromUID == request.auth.uid
+        && request.resource.data.toUID != request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.participants.size() == 2
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.toUID in request.resource.data.participants
+        && pair == request.resource.data.participants[0] + '_' + request.resource.data.participants[1]
+        && request.resource.data.participants[0] < request.resource.data.participants[1]
+        && request.resource.data.keys().hasOnly(['participants', 'fromUID', 'toUID', 'fromName',
+             'fromHandle', 'toName', 'toHandle', 'status', 'createdAt', 'updatedAt']);
+      allow update: if signedIn()
+        && resource.data.toUID == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt', 'updatedAt']);
+      allow delete: if signedIn() && request.auth.uid in resource.data.participants;
+    }
+
     match /invites/{token} {
       allow get: if signedIn();
       allow list: if false;
