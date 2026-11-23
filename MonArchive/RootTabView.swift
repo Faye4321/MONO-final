@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootTabView: View {
     @EnvironmentObject private var store: CollectionStore
@@ -10,6 +11,9 @@ struct RootTabView: View {
     @State private var purchaseQuestion: ShopPick?
     @State private var purchaseMemory: Moment?
     @State private var showingCreate = false
+    /// The floating tab bar steps aside while typing, so it never sits on
+    /// top of the keyboard or covers search results (P13).
+    @State private var keyboardVisible = false
 
     var body: some View {
         // The system tab bar is hidden on every tab; MonoTabBar below replaces
@@ -37,9 +41,17 @@ struct RootTabView: View {
         }
         .tint(ArchiveTheme.collectedRed)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MonoTabBar(selection: selection) { tab in
-                if tab == .create { showingCreate = true } else { selection = tab }
+            if !keyboardVisible {
+                MonoTabBar(selection: selection) { tab in
+                    if tab == .create { showingCreate = true } else { selection = tab }
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
         }
         .fullScreenCover(isPresented: $showingCreate) {
             CreateFlowView(

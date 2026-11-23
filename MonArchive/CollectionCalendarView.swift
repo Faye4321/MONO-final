@@ -153,6 +153,11 @@ struct MonthCard: View {
                 if !page.moments.isEmpty {
                     notes
                     collage
+                } else if page.month != nil {
+                    // Empty months still show the full calendar (H07).
+                    Text("No entries yet")
+                        .font(ArchiveTheme.body(13))
+                        .foregroundStyle(ArchiveTheme.ink.opacity(0.5))
                 }
             }
             .padding(20)

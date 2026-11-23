@@ -4,17 +4,25 @@ struct FriendProfileView: View {
     @EnvironmentObject private var socialStore: SocialStore
 
     let user: SocialUser
+    @State private var confirmingRemove = false
 
-    private var publicCategories: [CollectionCategory] {
-        var categories = user.interests
+    private var isFriend: Bool { socialStore.isFriend(user.id) }
 
-        for category in CollectionCategory.allCases {
-            if categories.contains(category) == false {
-                categories.append(category)
+    /// The collections this collector made public (from their profile).
+    private var publicCollections: [DirectoryProfile.PublicCollection] {
+        socialStore.directoryProfile(for: user.id)?.publicCollections ?? []
+    }
+
+    private var relationshipText: String? {
+        if isFriend {
+            if let since = socialStore.friendSince[user.id] {
+                return "FRIENDS SINCE " + since.formatted(.dateTime.month(.abbreviated).year()).uppercased()
             }
+            return "FRIENDS"
         }
-
-        return Array(categories.prefix(3))
+        if socialStore.incomingRequest(from: user.id) != nil { return "WANTS TO BE FRIENDS" }
+        if socialStore.hasSentRequest(to: user.id) { return "REQUEST SENT" }
+        return nil
     }
 
     private var sharedWithUser: [SharedCollection] {
@@ -33,6 +41,7 @@ struct FriendProfileView: View {
                     profileHeader
                     statistics
                     actionButtons
+                    FriendActionErrorBanner()
                     publicCollectionsSection
                     sharedCollectionsSection
                 }
@@ -59,41 +68,26 @@ struct FriendProfileView: View {
             }
 
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        // Prototype action
+                if isFriend {
+                    Menu {
+                        Button(role: .destructive) {
+                            confirmingRemove = true
+                        } label: {
+                            Label("Remove Friend", systemImage: "person.badge.minus")
+                        }
                     } label: {
-                        Label(
-                            "Mute",
-                            systemImage: "bell.slash"
-                        )
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(ArchiveTheme.ink)
+                            .frame(width: 40, height: 40)
                     }
-
-                    Button {
-                        // Prototype action
-                    } label: {
-                        Label(
-                            "Remove Friend",
-                            systemImage: "person.badge.minus"
-                        )
-                    }
-
-                    Button(role: .destructive) {
-                        // Prototype action
-                    } label: {
-                        Label(
-                            "Block or Report",
-                            systemImage: "exclamationmark.triangle"
-                        )
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(ArchiveTheme.ink)
-                        .frame(width: 40, height: 40)
+                    .accessibilityLabel("More options")
                 }
-                .accessibilityLabel("More options")
             }
+        }
+        .confirmationDialog("Remove \(user.name) as a friend?", isPresented: $confirmingRemove, titleVisibility: .visible) {
+            Button("Remove Friend", role: .destructive) { socialStore.removeFriend(user) }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -112,11 +106,11 @@ struct FriendProfileView: View {
                     .foregroundStyle(ArchiveTheme.ink)
                     .multilineTextAlignment(.center)
 
-                Text("\(user.handle) · \(user.location)")
+                Text([user.handle, user.location].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(ArchiveTheme.body(13))
                     .foregroundStyle(ArchiveTheme.catalogGray)
 
-                Text("FRIENDS SINCE OCT 2026")
+                Text(relationshipText ?? "")
                     .font(ArchiveTheme.label(9))
                     .foregroundStyle(
                         ArchiveTheme.collectedRed
@@ -157,7 +151,7 @@ struct FriendProfileView: View {
             statisticDivider
 
             FriendProfileStat(
-                value: user.sharedCollectionCount,
+                value: sharedWithUser.count,
                 label: "SHARED"
             )
         }
@@ -184,7 +178,57 @@ struct FriendProfileView: View {
 
     // MARK: - Actions
 
+    @ViewBuilder
     private var actionButtons: some View {
+        if isFriend {
+            friendActions
+        } else {
+            requestActions
+        }
+    }
+
+    /// Not friends yet: Add friend, Requested (tap to cancel) or Accept / Decline.
+    @ViewBuilder
+    private var requestActions: some View {
+        let busy = socialStore.isBusy(user.id)
+        HStack(spacing: 10) {
+            if let request = socialStore.incomingRequest(from: user.id) {
+                profileButton("DECLINE", systemImage: "xmark", filled: false) { socialStore.declineFriendRequest(request) }
+                profileButton("ACCEPT", systemImage: "checkmark", filled: true) { socialStore.acceptFriendRequest(request) }
+            } else if socialStore.hasSentRequest(to: user.id) {
+                profileButton("REQUESTED · CANCEL", systemImage: "clock", filled: false) { socialStore.cancelFriendRequest(to: user) }
+            } else {
+                profileButton("ADD FRIEND", systemImage: "person.badge.plus", filled: true) {
+                    Haptics.light()
+                    socialStore.sendFriendRequest(to: user)
+                }
+            }
+        }
+        .disabled(busy)
+        .opacity(busy ? 0.6 : 1)
+        .padding(.top, 12)
+    }
+
+    private func profileButton(_ title: String, systemImage: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(ArchiveTheme.label(11))
+                .foregroundStyle(filled ? Color.white : ArchiveTheme.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(filled ? ArchiveTheme.collectedRed : Color.white.opacity(0.74))
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+                .overlay {
+                    if !filled {
+                        RoundedRectangle(cornerRadius: 15)
+                            .stroke(ArchiveTheme.catalogGray.opacity(0.16), lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var friendActions: some View {
         HStack(spacing: 10) {
             NavigationLink {
                 ChatView(friend: user)
@@ -242,44 +286,28 @@ struct FriendProfileView: View {
         VStack(spacing: 12) {
             SocialSectionHeader(
                 title: "PUBLIC COLLECTIONS",
-                trailingText:
-                    "\(user.collectionCount)"
+                trailingText: "\(publicCollections.count)"
             )
 
-            HStack(spacing: 10) {
-                ForEach(publicCategories) { category in
-                    FriendPublicCollectionCard(
-                        category: category,
-                        objectCount: estimatedCount(
-                            for: category
+            if publicCollections.isEmpty {
+                Text("\(user.name) hasn't made any collections public yet.")
+                    .font(ArchiveTheme.body(12))
+                    .foregroundStyle(ArchiveTheme.catalogGray)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 3)
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    ForEach(publicCollections, id: \.self) { collection in
+                        FriendPublicCollectionCard(
+                            category: CollectionCategory(rawValue: collection.layout) ?? .poster,
+                            title: collection.name,
+                            objectCount: collection.count
                         )
-                    )
+                    }
                 }
             }
         }
         .padding(.top, 26)
-    }
-
-    private func estimatedCount(
-        for category: CollectionCategory
-    ) -> Int {
-        let divisor = max(
-            user.collectionCount,
-            1
-        )
-
-        let baseCount = max(
-            user.objectCount / divisor,
-            1
-        )
-
-        guard let index = publicCategories.firstIndex(
-            of: category
-        ) else {
-            return baseCount
-        }
-
-        return max(baseCount - index, 1)
     }
 
     // MARK: - Shared Collections
@@ -359,6 +387,7 @@ private struct FriendProfileStat: View {
 
 private struct FriendPublicCollectionCard: View {
     let category: CollectionCategory
+    var title: String? = nil
     let objectCount: Int
 
     var body: some View {
@@ -377,7 +406,7 @@ private struct FriendPublicCollectionCard: View {
             .frame(height: 118)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(category.title.uppercased())
+                Text((title ?? category.title).uppercased())
                     .font(ArchiveTheme.label(9))
                     .foregroundStyle(ArchiveTheme.ink)
                     .lineLimit(1)

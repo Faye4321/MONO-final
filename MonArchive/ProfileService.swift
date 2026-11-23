@@ -100,12 +100,11 @@ enum HandleRules {
 // MARK: - Profile Links
 
 enum ProfileLinks {
-    // TODO(team): agree on the link format. A custom scheme only opens MONO
-    // once it's registered in Xcode: Target ▸ Info ▸ URL Types ▸ "+",
-    // URL Schemes = monoarchive. A real https link needs a hosted web page.
-    static let scheme = "monoarchive"
+    // Uses the app's registered "mono" scheme (same as collection invites),
+    // so the link opens the collector's profile inside MONO.
+    static let scheme = "mono"
 
-    /// monoarchive://u/minashelf
+    /// mono://u/minashelf
     static func url(for handle: String) -> URL? {
         guard !handle.isEmpty else { return nil }
         var components = URLComponents()
@@ -273,6 +272,17 @@ struct CloudBackedProfileService: ProfileServicing {
         stored.avatarFileName = profile.avatarFileName
         try await local.saveProfile(stored)
 
+        // Claim the handle and update the public profile friends search.
+        // Only a taken handle stops the save; if the directory isn't set up
+        // on the server yet, the private profile still saves.
+        do {
+            try await SocialDirectory.publish(DirectoryProfile.from(profile))
+        } catch ProfileServiceError.handleTaken {
+            throw ProfileServiceError.handleTaken
+        } catch {
+            print("Directory publish skipped: \(error.localizedDescription)")
+        }
+
         cloud.activateCurrentUserIfNeeded()
         try await cloud.save(CloudUserProfile(
             name: profile.name, handle: profile.handle,
@@ -283,11 +293,23 @@ struct CloudBackedProfileService: ProfileServicing {
     func uploadAvatar(_ jpegData: Data) async throws -> String { try await local.uploadAvatar(jpegData) }
     func loadAvatar(named name: String) async throws -> UIImage? { try await local.loadAvatar(named: name) }
     func deleteAvatar(named name: String) async throws { try await local.deleteAvatar(named: name) }
-    func isHandleAvailable(_ handle: String) async throws -> Bool { try await local.isHandleAvailable(handle) }
-    func searchUsers(matching query: String) async throws -> [SocialUser] { try await local.searchUsers(matching: query) }
+    func isHandleAvailable(_ handle: String) async throws -> Bool {
+        do { return try await SocialDirectory.isHandleAvailable(handle) }
+        catch SocialDirectoryError.notSetUp { return true }  // can't check yet; don't block
+    }
+    func searchUsers(matching query: String) async throws -> [SocialUser] { [] }  // FriendsView uses SocialStore.searchDirectory
     func loadVisibility() async throws -> [String: CollectionVisibility] { try await local.loadVisibility() }
     func setVisibility(_ visibility: CollectionVisibility, forCollectionID id: String) async throws {
         try await local.setVisibility(visibility, forCollectionID: id)
+    }
+}
+
+extension DirectoryProfile {
+    /// The public part of the user's own profile.
+    static func from(_ profile: UserProfile) throws -> DirectoryProfile {
+        guard let uid = SocialDirectory.currentUID else { throw SocialDirectoryError.notSignedIn }
+        return DirectoryProfile(uid: uid, name: profile.name, handle: HandleRules.normalized(profile.handle),
+                                bio: profile.bio, location: profile.location)
     }
 }
 
@@ -337,8 +359,21 @@ final class ProfileStore: ObservableObject {
                 updated.location = value.location
                 updated.bio = value.bio
                 self.profile = updated
+                self.publishToDirectoryIfNeeded(updated)
             }
         Task { await reload() }
+    }
+
+    /// Accounts that chose a handle before friend search existed get a
+    /// public profile the first time it's seen on this device.
+    private var publishedDirectoryKeys: Set<String> = []
+
+    private func publishToDirectoryIfNeeded(_ profile: UserProfile) {
+        guard !profile.handle.isEmpty, let uid = SocialDirectory.currentUID else { return }
+        let key = uid + "|" + profile.handle + "|" + profile.name + "|" + profile.bio + "|" + profile.location
+        guard !publishedDirectoryKeys.contains(key) else { return }
+        publishedDirectoryKeys.insert(key)
+        Task { try? await SocialDirectory.publish(DirectoryProfile.from(profile)) }
     }
 
     // MARK: Display helpers
@@ -451,6 +486,27 @@ final class ProfileStore: ObservableObject {
             ?? .isPrivate {
         didSet {
             UserDefaults.standard.set(defaultVisibility.rawValue, forKey: Self.defaultVisibilityKey)
+        }
+    }
+
+    /// Visibility of one of the user's collections. A default shelf keeps
+    /// the setting it had when visibility was stored per category.
+    func visibility(forCollection collection: PersonalCollection) -> CollectionVisibility {
+        if let value = visibilityByID[collection.id.uuidString] { return value }
+        if collection.id == PersonalCollection.defaultID(for: collection.layout),
+           let legacy = visibilityByID[collection.layout.rawValue] { return legacy }
+        return defaultVisibility
+    }
+
+    func setVisibility(_ visibility: CollectionVisibility, forCollection collection: PersonalCollection) async throws {
+        let id = collection.id.uuidString
+        let previous = visibilityByID[id]
+        visibilityByID[id] = visibility  // Update right away; undo if saving fails.
+        do {
+            try await service.setVisibility(visibility, forCollectionID: id)
+        } catch {
+            visibilityByID[id] = previous
+            throw error
         }
     }
 

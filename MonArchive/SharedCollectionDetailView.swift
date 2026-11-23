@@ -383,10 +383,19 @@ private struct SharedCollectionItemPicker: View {
 
     let collectionID: UUID
 
-    private var selectedItemIDs: [UUID] {
-        socialStore.sharedCollections.first {
-            $0.id == collectionID
-        }?.itemIDs ?? []
+    /// Picked in this sheet, not yet saved.
+    @State private var picked: [UUID] = []
+    @State private var isSaving = false
+    @State private var saveError: String?
+    @State private var showingCreate = false
+
+    private var alreadyShared: Set<UUID> {
+        Set(socialStore.sharedCollections.first { $0.id == collectionID }?.itemIDs ?? [])
+    }
+
+    /// Only this account's own objects (H09). Demo objects never appear.
+    private var objects: [CollectibleItem] {
+        collectionStore.activeItems.sorted { ($0.addedOn ?? .distantPast) > ($1.addedOn ?? .distantPast) }
     }
 
     var body: some View {
@@ -395,69 +404,158 @@ private struct SharedCollectionItemPicker: View {
                 ArchiveTheme.ivory
                     .ignoresSafeArea()
 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(collectionStore.items) { item in
-                            Button {
-                                guard !selectedItemIDs.contains(item.id) else {
-                                    return
-                                }
-
-                                socialStore.addItem(
-                                    item.id,
-                                    to: collectionID
-                                )
-                            } label: {
-                                HStack(spacing: 14) {
-                                    Image(systemName: item.category.systemImage)
-                                        .foregroundStyle(ArchiveTheme.collectedRed)
-                                        .frame(width: 42, height: 42)
-                                        .background(ArchiveTheme.paperTan.opacity(0.3))
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.title)
-                                            .font(ArchiveTheme.heading(15))
-                                            .foregroundStyle(ArchiveTheme.ink)
-
-                                        Text(item.creator)
-                                            .font(ArchiveTheme.body(12))
-                                            .foregroundStyle(ArchiveTheme.catalogGray)
-                                    }
-
-                                    Spacer()
-
-                                    if selectedItemIDs.contains(item.id) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(ArchiveTheme.collectedRed)
-                                    } else {
-                                        Image(systemName: "plus.circle")
-                                            .foregroundStyle(ArchiveTheme.ink)
-                                    }
-                                }
-                                .padding(.vertical, 13)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(selectedItemIDs.contains(item.id))
-
-                            Divider()
-                                .overlay(ArchiveTheme.ink.opacity(0.08))
-                        }
-                    }
-                    .padding(.horizontal, 20)
+                if objects.isEmpty {
+                    emptyState
+                } else {
+                    list
                 }
             }
             .navigationTitle("ADD OBJECT")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("DONE") {
-                        dismiss()
-                    }
-                    .font(ArchiveTheme.label(12))
-                    .foregroundStyle(ArchiveTheme.collectedRed)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("CANCEL") { dismiss() }
+                        .font(ArchiveTheme.label(12))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .disabled(isSaving)
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button(picked.isEmpty ? "DONE" : "ADD \(picked.count)") { save() }
+                            .font(ArchiveTheme.label(12))
+                            .foregroundStyle(picked.isEmpty ? ArchiveTheme.catalogGray : ArchiveTheme.collectedRed)
+                            .disabled(picked.isEmpty)
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let saveError {
+                    Label(saveError, systemImage: "exclamationmark.triangle")
+                        .font(ArchiveTheme.body(12))
+                        .foregroundStyle(ArchiveTheme.collectedRed)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.95))
+                }
+            }
+            .fullScreenCover(isPresented: $showingCreate) {
+                CreateFlowView(
+                    onSaved: { showingCreate = false },
+                    onCancel: { showingCreate = false }
+                )
+            }
+        }
+        .interactiveDismissDisabled(isSaving)
+    }
+
+    private var emptyState: some View {
+        // H10: a real next step instead of an empty list.
+        SocialStateCard(
+            systemImage: "shippingbox",
+            title: "NO OBJECTS YET",
+            message: "Add an object to your collection first, then come back to share it here.",
+            actionTitle: "ADD YOUR FIRST OBJECT"
+        ) { showingCreate = true }
+        .padding(20)
+    }
+
+    private var list: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(objects) { item in
+                    row(item)
+                    Divider().overlay(ArchiveTheme.ink.opacity(0.08))
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func row(_ item: CollectibleItem) -> some View {
+        let shared = alreadyShared.contains(item.id)
+        let selected = picked.contains(item.id)
+        return Button {
+            guard !shared, !isSaving else { return }
+            Haptics.selection()
+            if selected { picked.removeAll { $0 == item.id } } else { picked.append(item.id) }
+            saveError = nil
+        } label: {
+            HStack(spacing: 14) {
+                thumbnail(item)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(ArchiveTheme.heading(15))
+                        .foregroundStyle(ArchiveTheme.ink)
+                        .lineLimit(1)
+                    Text(shared ? "Already in this collection" : item.creator)
+                        .font(ArchiveTheme.body(12))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: shared || selected ? "checkmark.circle.fill" : "plus.circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(shared ? ArchiveTheme.catalogGray : selected ? ArchiveTheme.collectedRed : ArchiveTheme.ink)
+            }
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(shared)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(shared ? "Already added" : selected ? "Selected" : "Not selected")
+    }
+
+    /// H11: the real photo when it's on this device, otherwise a neutral
+    /// placeholder; a missing cloud photo offers a retry.
+    @ViewBuilder
+    private func thumbnail(_ item: CollectibleItem) -> some View {
+        let missingPhoto = item.imageFileName != nil && item.uploadedImage == nil
+        ZStack {
+            if missingPhoto {
+                RoundedRectangle(cornerRadius: 8).fill(ArchiveTheme.paperTan.opacity(0.3))
+                Button {
+                    collectionStore.retryCloudSync()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .frame(width: 46, height: 46)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Retry loading photo")
+            } else if item.hasArtwork {
+                ArtworkView(item: item)
+            } else {
+                RoundedRectangle(cornerRadius: 8).fill(ArchiveTheme.paperTan.opacity(0.3))
+                Image(systemName: item.category.systemImage)
+                    .foregroundStyle(ArchiveTheme.collectedRed)
+            }
+        }
+        .frame(width: 46, height: 46)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func save() {
+        guard !picked.isEmpty, !isSaving else { return }
+        isSaving = true
+        saveError = nil
+        let ids = picked
+        Task { @MainActor in
+            do {
+                try await socialStore.addItems(ids, to: collectionID)
+                Haptics.success()
+                isSaving = false
+                dismiss()
+            } catch {
+                // Keep the selection so DONE can simply be tapped again.
+                isSaving = false
+                saveError = "Couldn't add \(ids.count == 1 ? "this object" : "these objects"). Check your connection and tap ADD again. (\(error.localizedDescription))"
             }
         }
     }

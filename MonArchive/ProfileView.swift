@@ -16,19 +16,36 @@ struct ProfileView: View {
     @State private var collectionsScrollRequest = 0
 
     private static let myCollectionsAnchor = "myCollections"
-    @State private var updatingVisibility: CollectionCategory?
+    @State private var updatingVisibility: UUID?
     @State private var visibilityError: String?
 
-    private var activeCategoryCount: Int {
-        CollectionCategory.allCases.filter { store.count(for: $0) > 0 }.count
+    /// The user's real collections (P04): ones they created, plus a default
+    /// shelf only once it holds something. Not the four fixed hobbies.
+    private var myCollections: [PersonalCollection] {
+        let defaults = Set(PersonalCollection.defaults.map(\.id))
+        return store.activeCollections.filter { collection in
+            !defaults.contains(collection.id) || !store.items(in: collection.id).isEmpty
+        }
     }
 
-    private var categoriesWithObjects: [CollectionCategory] {
-        CollectionCategory.allCases.filter { store.count(for: $0) > 0 }
+    private var publicCollections: [PersonalCollection] {
+        myCollections.filter { profileStore.visibility(forCollection: $0) == .isPublic }
     }
 
-    private var publicCategories: [CollectionCategory] {
-        categoriesWithObjects.filter { profileStore.visibility(for: $0) == .isPublic }
+    /// Counts are only shown once the account has loaded (P03).
+    private var objectCount: Int? { store.cloudReady ? store.activeItems.count : nil }
+    private var collectionCount: Int? { store.cloudReady && store.catalogReady ? myCollections.count : nil }
+    private var friendCount: Int? { socialStore.friendsState == .ready ? socialStore.friends.count : nil }
+
+    private func publishStats() {
+        guard store.cloudReady, store.catalogReady else { return }
+        socialStore.publishStats(
+            objectCount: store.activeItems.count,
+            collectionCount: myCollections.count,
+            publicCollections: publicCollections.map {
+                .init(name: $0.name, count: store.items(in: $0.id).count, layout: $0.layout.rawValue)
+            }
+        )
     }
 
     private var hasHandle: Bool { !profileStore.profile.handle.isEmpty }
@@ -44,12 +61,14 @@ struct ProfileView: View {
                     VStack(spacing: 0) {
                         topBar
                         profileHeader
-                        CloudAccountPanel()
                         socialActionSection
                         myCollectionsSection
                             .id(Self.myCollectionsAnchor)
                         sharedCollectionsSection
                         PastCollectionSection()
+                        // Sync details and Join collection sit at the bottom,
+                        // collapsed, so they don't crowd the profile (P05/P06).
+                        CloudAccountPanel()
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 32)
@@ -73,7 +92,10 @@ struct ProfileView: View {
             .task { await profileStore.loadIfNeeded() }
             .onAppear {
                 socialStore.seedSharedCollectionItems(from: store.items)
+                publishStats()
             }
+            .onChange(of: store.activeItems.count) { _, _ in publishStats() }
+            .onChange(of: publicCollections.map(\.id)) { _, _ in publishStats() }
         }
     }
 
@@ -250,6 +272,23 @@ struct ProfileView: View {
                     }
                     }
                     .padding(.top, 2)
+
+                    // The one edit entry (P01): photo, name, handle, bio.
+                    Button {
+                        showingEditProfile = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(ArchiveTheme.ink)
+                            .frame(width: 34, height: 34)
+                            .background(ArchiveTheme.ivory, in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, -6)
+                    .padding(.trailing, -8)
+                    .accessibilityLabel("Edit profile")
                 }
 
                 Rectangle()
@@ -261,31 +300,31 @@ struct ProfileView: View {
                     NavigationLink {
                         ArchiveSearchView()
                     } label: {
-                        ProfileStat(value: store.activeItems.count, label: "OBJECTS")
+                        ProfileStat(value: objectCount, label: "OBJECTS")
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(store.activeItems.count) objects")
+                    .accessibilityLabel(objectCount.map { "\($0) objects" } ?? "Objects loading")
                     .accessibilityHint("Opens all your objects")
                     statDivider
                     Button {
                         collectionsScrollRequest += 1
                     } label: {
-                        ProfileStat(value: activeCategoryCount, label: "COLLECTIONS")
+                        ProfileStat(value: collectionCount, label: "COLLECTIONS")
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(activeCategoryCount) collections")
+                    .accessibilityLabel(collectionCount.map { "\($0) collections" } ?? "Collections loading")
                     .accessibilityHint("Scrolls to My Collections")
                     statDivider
                     NavigationLink {
                         FriendsView()
                     } label: {
-                        ProfileStat(value: socialStore.friends.count, label: "FRIENDS")
+                        ProfileStat(value: friendCount, label: "FRIENDS")
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(socialStore.friends.count) friends")
+                    .accessibilityLabel(friendCount.map { "\($0) friends" } ?? "Friends loading")
                     .accessibilityHint("Opens your friends list")
                 }
             }
@@ -339,11 +378,6 @@ struct ProfileView: View {
             // Laid out like Instagram: two text buttons, then a small
             // "discover people" icon button at the end.
             HStack(spacing: 8) {
-                Button { showingEditProfile = true } label: {
-                    actionLabel("EDIT PROFILE", systemImage: nil, primary: false)
-                }
-                .buttonStyle(.plain)
-
                 if let url = profileStore.shareURL {
                     // The share sheet also has Copy, so no separate button.
                     ShareLink(
@@ -351,13 +385,13 @@ struct ProfileView: View {
                         subject: Text("My MONO profile"),
                         message: Text(shareMessage)
                     ) {
-                        actionLabel("SHARE PROFILE", systemImage: nil, primary: false)
+                        actionLabel("SHARE PROFILE", systemImage: "square.and.arrow.up", primary: false)
                     }
                     .buttonStyle(.plain)
                 } else {
                     // No handle yet, so there's no link to share.
                     Button { showingEditProfile = true } label: {
-                        actionLabel("SHARE PROFILE", systemImage: nil, primary: false)
+                        actionLabel("SHARE PROFILE", systemImage: "square.and.arrow.up", primary: false)
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Add a handle first to share your profile")
@@ -378,7 +412,13 @@ struct ProfileView: View {
                         }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Find friends")
+                .accessibilityLabel("Friends")
+                .overlay(alignment: .topTrailing) {
+                    if !socialStore.friendRequests.isEmpty {
+                        Circle().fill(ArchiveTheme.collectedRed).frame(width: 9, height: 9).offset(x: 2, y: -2)
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             .disabled(profileStore.loadState != .loaded)
 
@@ -424,17 +464,22 @@ struct ProfileView: View {
                     .font(ArchiveTheme.heading(18))
                     .foregroundStyle(ArchiveTheme.ink)
                 Spacer()
-                if !categoriesWithObjects.isEmpty {
-                    Text("\(publicCategories.count) PUBLIC")
+                if !myCollections.isEmpty {
+                    Text("\(publicCollections.count) PUBLIC")
                         .font(ArchiveTheme.label(10))
                         .tracking(0.7)
                         .foregroundStyle(ArchiveTheme.catalogGray)
                 }
             }
-            .padding(.top, 26)
+            .padding(.top, 22)
             .padding(.horizontal, 3)
 
-            if categoriesWithObjects.isEmpty {
+            if !store.cloudReady || !store.catalogReady {
+                ProgressView()
+                    .tint(ArchiveTheme.collectedRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 26)
+            } else if myCollections.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "rectangle.stack.badge.plus")
                         .font(.system(size: 27))
@@ -452,11 +497,11 @@ struct ProfileView: View {
                 .background(Color.white.opacity(0.55))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             } else {
-                ForEach(categoriesWithObjects) { category in
-                    myCollectionRow(category)
+                ForEach(myCollections) { collection in
+                    myCollectionRow(collection)
                 }
 
-                Text(visibilityError ?? "Private collections are only visible to you. Public ones appear when you share your profile.")
+                Text(visibilityError ?? "Private collections are only visible to you. Public ones show on your profile for other collectors.")
                     .font(ArchiveTheme.body(11))
                     .foregroundStyle(visibilityError == nil ? ArchiveTheme.catalogGray : ArchiveTheme.collectedRed)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -465,24 +510,24 @@ struct ProfileView: View {
         }
     }
 
-    private func myCollectionRow(_ category: CollectionCategory) -> some View {
-        let count = store.count(for: category)
+    private func myCollectionRow(_ collection: PersonalCollection) -> some View {
+        let count = store.items(in: collection.id).count
         return HStack(spacing: 12) {
             NavigationLink {
-                ShelfDetailView(category: category)
+                ShelfDetailView(category: collection.layout, collectionID: collection.id)
             } label: {
                 HStack(spacing: 14) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 13)
                             .fill(ArchiveTheme.paperTan.opacity(0.45))
-                        Image(systemName: category.systemImage)
+                        Image(systemName: collection.layout.systemImage)
                             .font(.system(size: 21))
                             .foregroundStyle(ArchiveTheme.ink)
                     }
                     .frame(width: 52, height: 52)
 
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(category.title)
+                        Text(collection.name)
                             .font(ArchiveTheme.heading(16))
                             .foregroundStyle(ArchiveTheme.ink)
                             .lineLimit(1)
@@ -499,7 +544,7 @@ struct ProfileView: View {
             .buttonStyle(.plain)
             .accessibilityHint("Opens this collection")
 
-            visibilityMenu(for: category)
+            visibilityMenu(for: collection)
         }
         .padding(14)
         .background(Color.white.opacity(0.72))
@@ -510,11 +555,11 @@ struct ProfileView: View {
         }
     }
 
-    private func visibilityMenu(for category: CollectionCategory) -> some View {
-        let current = profileStore.visibility(for: category)
+    private func visibilityMenu(for collection: PersonalCollection) -> some View {
+        let current = profileStore.visibility(forCollection: collection)
         let selection = Binding<CollectionVisibility>(
-            get: { profileStore.visibility(for: category) },
-            set: { newValue in setVisibility(newValue, for: category) }
+            get: { profileStore.visibility(forCollection: collection) },
+            set: { newValue in setVisibility(newValue, for: collection) }
         )
 
         return Menu {
@@ -525,7 +570,7 @@ struct ProfileView: View {
             }
         } label: {
             HStack(spacing: 5) {
-                if updatingVisibility == category {
+                if updatingVisibility == collection.id {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: current.systemImage)
@@ -546,20 +591,20 @@ struct ProfileView: View {
             )
         }
         .disabled(updatingVisibility != nil)
-        .accessibilityLabel("\(category.title) is \(current.title.lowercased())")
+        .accessibilityLabel("\(collection.name) is \(current.title.lowercased())")
         .accessibilityHint("Change who can see this collection")
     }
 
-    private func setVisibility(_ visibility: CollectionVisibility, for category: CollectionCategory) {
-        guard visibility != profileStore.visibility(for: category) else { return }
-        updatingVisibility = category
+    private func setVisibility(_ visibility: CollectionVisibility, for collection: PersonalCollection) {
+        guard visibility != profileStore.visibility(forCollection: collection) else { return }
+        updatingVisibility = collection.id
         visibilityError = nil
         Task { @MainActor in
             do {
-                try await profileStore.setVisibility(visibility, for: category)
+                try await profileStore.setVisibility(visibility, forCollection: collection)
                 Haptics.selection()
             } catch {
-                visibilityError = "Couldn't update \(category.title). \(error.localizedDescription)"
+                visibilityError = "Couldn't update \(collection.name). \(error.localizedDescription)"
             }
             updatingVisibility = nil
         }
@@ -921,7 +966,8 @@ private struct ProfileSettingsView: View {
 
 private struct ProfileStat: View {
 
-    let value: Int
+    /// nil while loading or after a failed load, so it never shows a false 0.
+    let value: Int?
 
     let label: String
 
@@ -929,7 +975,7 @@ private struct ProfileStat: View {
 
         VStack(spacing: 3) {
 
-            Text("\(value)")
+            Text(value.map(String.init) ?? "–")
 
                 .font(ArchiveTheme.heading(20))
 

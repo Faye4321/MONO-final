@@ -15,6 +15,7 @@ final class CollectionStore: ObservableObject {
     private(set) var archiveURL: URL
     private let legacyURL: URL
     private let seedItems: [CollectibleItem]
+    private let seedIDs: Set<UUID>
 
     private struct ArchiveFile: Codable {
         var version = 1
@@ -31,6 +32,7 @@ final class CollectionStore: ObservableObject {
         archiveURL = documents.appendingPathComponent("archive.json")
         legacyURL = documents.appendingPathComponent("uploaded-objects.json")
         self.seedItems = seedItems
+        seedIDs = Set(seedItems.map(\.id))
 
         let archive = Self.loadArchive(from: archiveURL, legacyURL: legacyURL)
         let overrides = Dictionary(
@@ -115,6 +117,7 @@ final class CollectionStore: ObservableObject {
         deletedItems = []; deletedMoments = []; uploadedNames = []; pendingPhotoDeletes = []
         pendingPurchase = nil
         cloudError = nil
+        photoFailures = [:]
         receivedItems = false; receivedMoments = false; cloudReady = false
         items = []; moments = []
         savedItems = [:]; savedMoments = [:]
@@ -132,7 +135,11 @@ final class CollectionStore: ObservableObject {
             uploadedNames = cache.uploadedNames
             pendingPhotoDeletes = cache.pendingPhotoDeletes
             cloudReady = true
-        } else { items = seedItems }
+        }
+        // Signed-in accounts never show the bundled demo objects (Chloe's
+        // H05/H07): a new account starts empty and fills up from its own
+        // uploads. Older caches may still hold them, so drop them here.
+        items.removeAll(where: isBundledSample)
         savedItems = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
         savedMoments = Dictionary(uniqueKeysWithValues: moments.map { ($0.id, $0) })
         hasLegacyArchive = !UserDefaults.standard.bool(forKey: "mono.legacyImported") &&
@@ -181,6 +188,7 @@ final class CollectionStore: ObservableObject {
                       let data = payload.data(using: .utf8),
                       let value = try? JSONDecoder().decode(CollectibleItem.self, from: data), value.id == id,
                       value.imageFileName.map(Self.validPhotoName) ?? true {
+                guard !isBundledSample(value) else { continue }
                 byID[id] = value; deletedItems.remove(id)
                 if let name = value.imageFileName { uploadedNames.insert(name) }
             }
@@ -267,7 +275,10 @@ final class CollectionStore: ObservableObject {
         guard let uid = accountUID, cloudReady, !syncing else { return }
         cloudError = nil
         hydratePhotos()
-        guard !dirtyItems.isEmpty || !dirtyMoments.isEmpty || !pendingPhotoDeletes.isEmpty else { return }
+        guard !dirtyItems.isEmpty || !dirtyMoments.isEmpty || !pendingPhotoDeletes.isEmpty else {
+            if cloudStatus != "Up to date" && !syncing { cloudStatus = "Up to date" }
+            return
+        }
         syncing = true
         cloudStatus = "Syncing…"
         cloudError = nil
@@ -330,7 +341,7 @@ final class CollectionStore: ObservableObject {
                 guard self.accountUID == uid else { return }
                 self.syncing = false
                 self.cloudStatus = "Changes saved on this device"
-                self.cloudError = error.localizedDescription
+                self.cloudError = Self.describePhotoError(error)
                 self.persistAccount()
             }
         }
@@ -359,13 +370,54 @@ final class CollectionStore: ObservableObject {
         uploadedNames.insert(name)
     }
 
+    /// Photos that couldn't be downloaded on this device. The local copy
+    /// (if any) is never overwritten; they are retried by Retry sync.
+    @Published private(set) var photoFailures: [String: String] = [:]
+    @Published private(set) var photosSyncing = false
+
+    /// One line for Profile ▸ Cloud: Syncing, Up to date, Some photos need
+    /// syncing, or Sync failed. Never "Up to date" while something failed.
+    var syncSummary: SyncSummary {
+        if !cloudReady || syncing || photosSyncing { return .syncing }
+        if cloudError != nil || catalogError != nil { return .failed }
+        if !dirtyItems.isEmpty || !dirtyMoments.isEmpty || !collectionRevisions.isEmpty { return .waiting }
+        if !photoFailures.isEmpty { return .photosPending(photoFailures.count) }
+        return .upToDate
+    }
+
+    enum SyncSummary: Equatable {
+        case syncing, upToDate, waiting, failed
+        case photosPending(Int)
+
+        var title: String {
+            switch self {
+            case .syncing: "Syncing…"
+            case .upToDate: "Up to date"
+            case .waiting: "Changes waiting to sync"
+            case .failed: "Sync failed"
+            case .photosPending(let count): count == 1 ? "1 photo needs syncing" : "\(count) photos need syncing"
+            }
+        }
+
+        var isProblem: Bool {
+            switch self {
+            case .failed, .photosPending, .waiting: true
+            default: false
+            }
+        }
+    }
+
     private func hydratePhotos() {
         guard hydrationTask == nil, let uid = accountUID else { return }
         let names = Set(items.compactMap(\.imageFileName) + moments.flatMap(\.photoFileNames))
+        // Forget failures for photos that are no longer referenced.
+        photoFailures = photoFailures.filter { names.contains($0.key) }
         hydrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            self.photosSyncing = true
             defer {
                 if self.accountUID == uid {
+                    self.photosSyncing = false
                     self.hydrationTask = nil
                     let current = Set(self.items.compactMap(\.imageFileName) + self.moments.flatMap(\.photoFileNames))
                     let newlyArrived = current.subtracting(names).filter {
@@ -379,13 +431,31 @@ final class CollectionStore: ObservableObject {
                     let data = try await CloudStorage.client.storage.from(CloudStorage.bucket).download(path: uid + "/" + name)
                     try self.checkSession(uid)
                     try data.write(to: ImageStore.url(for: name), options: .atomic)
+                    self.photoFailures.removeValue(forKey: name)
                     self.objectWillChange.send()
                 } catch {
                     guard self.accountUID == uid else { return }
-                    self.cloudError = "Photo download: " + error.localizedDescription
+                    // Recorded per photo instead of as a general cloud error,
+                    // so the rest of the account can still read "Up to date".
+                    self.photoFailures[name] = Self.describePhotoError(error)
                 }
             }
         }
+    }
+
+    /// Short, technical reason kept for the Cloud details view.
+    private static func describePhotoError(_ error: Error) -> String {
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain {
+            switch ns.code {
+            case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed:
+                return "Photo server not found (\(CloudStorage.hostDescription)). Your changes are saved on this phone. The Supabase storage project may be paused or deleted — check it in the Supabase dashboard."
+            case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut:
+                return "No connection to the photo server."
+            default: break
+            }
+        }
+        return error.localizedDescription
     }
 
     enum CloudFailure: LocalizedError {
@@ -569,7 +639,15 @@ final class CollectionStore: ObservableObject {
         }
     }
 
-    var defaultCleanupOffered: Bool { catalogReady && sampleOfferEligible && !sampleChoiceMade }
+    var defaultCleanupOffered: Bool {
+        catalogReady && sampleOfferEligible && !sampleChoiceMade && defaultExampleCount > 0
+    }
+
+    /// A bundled demo object the user didn't create themselves.
+    func isBundledSample(_ item: CollectibleItem) -> Bool {
+        !item.isUserCreated && seedIDs.contains(item.id)
+    }
+
 
     /// Called by the new-account registration flow only. Returning logins never re-enable this offer.
     func requestDefaultCleanupOfferForNewAccount() {
@@ -847,7 +925,12 @@ final class CollectionStore: ObservableObject {
                 // The entry reuses the object's id, so it is stable across reads.
                 Moment(id: item.id, kind: .acquired, date: item.addedOn, itemIDs: [item.id])
             }
-        return CalendarSource(moments: moments + added, addedEntryIDs: Set(added.map(\.id)))
+        let existing = Set(items.map(\.id))
+        let kept = moments.filter { moment in
+            moment.itemIDs.contains(where: existing.contains)
+                || !moment.photoFileNames.isEmpty || !moment.note.isEmpty
+        }
+        return CalendarSource(moments: kept + added, addedEntryIDs: Set(added.map(\.id)))
     }
 
     /// Undated moments sort after dated ones.

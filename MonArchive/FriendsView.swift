@@ -10,37 +10,27 @@ struct FriendsView: View {
     enum SearchState: Equatable {
         case idle
         case loading
-        case loaded([SocialUser])
+        /// Results belong to the query they were searched for, so a slow
+        /// older search can never replace a newer one (P11).
+        case loaded(query: String, users: [SocialUser])
         case failed(String)
     }
 
+    /// Spaces, "@" and capitals removed (P10).
     private var query: String {
         HandleRules.normalized(searchText)
     }
 
     private var isSearching: Bool { !query.isEmpty }
 
-    private var filteredFriends: [SocialUser] {
-        guard isSearching else { return socialStore.friends }
-
-        return socialStore.friends.filter { friend in
-            HandleRules.normalized(friend.handle).contains(query) ||
-            friend.name.lowercased().contains(query) ||
-            friend.interests.contains {
-                $0.title.lowercased().contains(query)
-            }
-        }
-    }
-
-    /// Search results that aren't already friends (friends show above).
-    private var otherCollectors: [SocialUser] {
-        guard case .loaded(let users) = searchState else { return [] }
-        return users.filter { socialStore.isFriend($0.id) == false }
+    private var results: [SocialUser] {
+        guard case .loaded(let forQuery, let users) = searchState, forQuery == query else { return [] }
+        return users.filter { !socialStore.isCurrentUser($0.id) }
     }
 
     private var inviteText: String {
         if let url = profileStore.shareURL {
-            return "Join me on MONO and see my collection: \(url.absoluteString)"
+            return "Add me on MONO (\(profileStore.displayHandle)): \(url.absoluteString)"
         }
         return "Join me on MONO, a home for everything you collect."
     }
@@ -53,6 +43,7 @@ struct FriendsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     searchBar
+                    FriendActionErrorBanner()
 
                     if isSearching {
                         searchResults
@@ -61,6 +52,7 @@ struct FriendsView: View {
                             requestsSection
                         }
                         friendsSection
+                        if !socialStore.sentRequestIDs.isEmpty { sentSection }
                     }
                 }
                 .padding(.horizontal, 18)
@@ -157,9 +149,9 @@ struct FriendsView: View {
         try? await Task.sleep(nanoseconds: 350_000_000)
         guard !Task.isCancelled else { return }
         do {
-            let users = try await profileStore.searchUsers(matching: current)
-            guard !Task.isCancelled else { return }
-            searchState = .loaded(users)
+            let users = try await socialStore.searchDirectory(current)
+            guard !Task.isCancelled, current == query else { return }
+            searchState = .loaded(query: current, users: users)
         } catch {
             guard !Task.isCancelled else { return }
             searchState = .failed(error.localizedDescription)
@@ -168,28 +160,10 @@ struct FriendsView: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        if filteredFriends.isEmpty == false {
-            VStack(spacing: 12) {
-                SocialSectionHeader(
-                    title: "YOUR FRIENDS",
-                    trailingText: "\(filteredFriends.count)"
-                )
-                ForEach(filteredFriends) { friend in
-                    NavigationLink {
-                        FriendProfileView(user: friend)
-                    } label: {
-                        FriendRow(user: friend)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.top, 24)
-        }
-
         VStack(spacing: 12) {
             SocialSectionHeader(
                 title: "COLLECTORS ON MONO",
-                trailingText: searchState == .loading ? "" : "\(otherCollectors.count)"
+                trailingText: results.isEmpty ? "" : "\(results.count)"
             )
 
             switch searchState {
@@ -217,24 +191,30 @@ struct FriendsView: View {
                 }
 
             case .loaded:
-                if otherCollectors.isEmpty {
-                    if filteredFriends.isEmpty {
-                        SocialStateCard(
-                            systemImage: "person.slash",
-                            title: "NO COLLECTORS FOUND",
-                            message: "Check the spelling of \(HandleRules.display(query)), or invite them to MONO."
-                        )
-                    } else {
-                        Text("No one else matches \(HandleRules.display(query)).")
-                            .font(ArchiveTheme.body(12))
-                            .foregroundStyle(ArchiveTheme.catalogGray)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 3)
-                    }
+                if results.isEmpty {
+                    SocialStateCard(
+                        systemImage: "person.slash",
+                        title: "NO USER FOUND",
+                        message: "No one on MONO has a handle starting with \(HandleRules.display(query)). Check the spelling, or invite them with the button at the top."
+                    )
                 } else {
-                    ForEach(otherCollectors) { user in
+                    ForEach(results) { user in
                         CollectorSearchRow(user: user)
                     }
+                }
+            }
+        }
+        .padding(.top, 24)
+    }
+
+    // MARK: - Sent
+
+    private var sentSection: some View {
+        VStack(spacing: 12) {
+            SocialSectionHeader(title: "SENT", trailingText: "\(socialStore.sentRequestIDs.count)")
+            ForEach(Array(socialStore.sentRequestIDs), id: \.self) { id in
+                if let user = socialStore.user(withID: id) {
+                    CollectorSearchRow(user: user)
                 }
             }
         }
@@ -264,11 +244,21 @@ struct FriendsView: View {
         VStack(spacing: 12) {
             SocialSectionHeader(
                 title: "YOUR FRIENDS",
-                trailingText:
-                    "\(socialStore.friends.count)"
+                trailingText: socialStore.friendsState == .ready ? "\(socialStore.friends.count)" : ""
             )
 
-            if socialStore.friends.isEmpty {
+            if case .failed(let message) = socialStore.friendsState {
+                SocialStateCard(
+                    systemImage: "exclamationmark.triangle",
+                    title: "FRIENDS COULDN'T LOAD",
+                    message: message
+                )
+            } else if socialStore.friendsState == .loading {
+                ProgressView()
+                    .tint(ArchiveTheme.collectedRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+            } else if socialStore.friends.isEmpty {
                 SocialStateCard(
                     systemImage: "person.2",
                     title: "NO FRIENDS YET",
@@ -334,18 +324,32 @@ private struct CollectorSearchRow: View {
 
     @ViewBuilder
     private var actionButton: some View {
-        if let request = socialStore.incomingRequest(from: user.id) {
-            pill("ACCEPT", filled: true) {
-                withAnimation { socialStore.acceptFriendRequest(request) }
+        if socialStore.isBusy(user.id) {
+            ProgressView().frame(width: 60, height: 34)
+        } else if socialStore.isFriend(user.id) {
+            Text("FRIENDS")
+                .font(ArchiveTheme.label(10))
+                .tracking(0.6)
+                .foregroundStyle(ArchiveTheme.catalogGray)
+                .padding(.horizontal, 10)
+        } else if let request = socialStore.incomingRequest(from: user.id) {
+            HStack(spacing: 6) {
+                pill("DECLINE", filled: false) {
+                    withAnimation { socialStore.declineFriendRequest(request) }
+                }
+                .accessibilityLabel("Decline friend request from \(user.name)")
+                pill("ACCEPT", filled: true) {
+                    withAnimation { socialStore.acceptFriendRequest(request) }
+                }
+                .accessibilityLabel("Accept friend request from \(user.name)")
             }
-            .accessibilityLabel("Accept friend request from \(user.name)")
         } else if socialStore.hasSentRequest(to: user.id) {
             pill("REQUESTED", filled: false) {
                 withAnimation { socialStore.cancelFriendRequest(to: user) }
             }
             .accessibilityLabel("Cancel friend request to \(user.name)")
         } else {
-            pill("ADD", filled: true) {
+            pill("ADD FRIEND", filled: true) {
                 Haptics.light()
                 withAnimation { socialStore.sendFriendRequest(to: user) }
             }
@@ -367,6 +371,36 @@ private struct CollectorSearchRow: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Inline note when an add / accept / remove didn't go through.
+struct FriendActionErrorBanner: View {
+    @EnvironmentObject private var socialStore: SocialStore
+
+    var body: some View {
+        if let message = socialStore.friendActionError {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(ArchiveTheme.collectedRed)
+                Text(message)
+                    .font(ArchiveTheme.body(12))
+                    .foregroundStyle(ArchiveTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    socialStore.friendActionError = nil
+                } label: {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 14))
+            .padding(.top, 12)
+        }
     }
 }
 
@@ -446,12 +480,7 @@ private struct FriendRequestCard: View {
                             ArchiveTheme.catalogGray
                         )
 
-                    Text(
-                        """
-                        \(request.mutualCollectionCount) shared collections · \
-                        \(request.mutualInterestCount) shared interests
-                        """
-                    )
+                    Text("Wants to be friends")
                     .font(ArchiveTheme.body(11))
                     .foregroundStyle(
                         ArchiveTheme.catalogGray
@@ -489,7 +518,7 @@ private struct FriendRequestCard: View {
                         socialStore.acceptFriendRequest(request)
                     }
                 } label: {
-                    Text("ACCEPT")
+                    Text(socialStore.isBusy(request.sender.id) ? "…" : "ACCEPT")
                         .font(ArchiveTheme.label(11))
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
@@ -528,7 +557,10 @@ private struct FriendRow: View {
     let user: SocialUser
 
     private var interestText: String {
-        user.interests
+        guard !user.interests.isEmpty else {
+            return user.objectCount == 1 ? "1 object" : "\(user.objectCount) objects"
+        }
+        return user.interests
             .map(\.title)
             .joined(separator: " · ")
     }

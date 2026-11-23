@@ -40,6 +40,9 @@ struct AppRootView: View {
     @EnvironmentObject private var profileStore: CloudProfileStore
     @State private var invitationMessage: String?
     @State private var pendingInvitation: String?
+    /// A collector opened from a shared profile link (mono://u/handle).
+    @State private var linkedCollector: SocialUser?
+    @State private var pendingProfileHandle: String?
     @AppStorage("mono.didCompleteOnboarding") private var didCompleteOnboarding = false
     @State private var route: AppEntryRoute = .splash
     @State private var selectedTab: AppTab = .explore
@@ -129,9 +132,20 @@ struct AppRootView: View {
             else if let invitation = pendingInvitation {
                 pendingInvitation = nil
                 acceptInvitation(invitation)
+            } else if let handle = pendingProfileHandle {
+                pendingProfileHandle = nil
+                openProfile(handle)
             }
         }
         .onOpenURL { url in
+            if let handle = ProfileLinks.handle(from: url) {
+                if Auth.auth().currentUser == nil {
+                    pendingProfileHandle = handle
+                    invitationMessage = "Sign in to see this collector's profile."
+                    transition(to: .login)
+                } else { openProfile(handle) }
+                return
+            }
             guard url.scheme == "mono", url.host == "collection" else { return }
             if Auth.auth().currentUser == nil {
                 pendingInvitation = url.absoluteString
@@ -139,7 +153,21 @@ struct AppRootView: View {
                 transition(to: .login)
             } else { acceptInvitation(url.absoluteString) }
         }
-        .alert("Collection invitation", isPresented: Binding(
+        .sheet(item: $linkedCollector) { user in
+            NavigationStack {
+                FriendProfileView(user: user)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("CLOSE") { linkedCollector = nil }
+                                .font(ArchiveTheme.label(12))
+                                .foregroundStyle(ArchiveTheme.ink)
+                        }
+                    }
+            }
+            .environmentObject(socialStore)
+            .environmentObject(store)
+        }
+        .alert("MONO", isPresented: Binding(
             get: { invitationMessage != nil }, set: { if !$0 { invitationMessage = nil } }
         )) { Button("OK", role: .cancel) {} }
         message: { Text(invitationMessage ?? "") }
@@ -148,6 +176,24 @@ struct AppRootView: View {
             replayTourRequested = false
             isReplayingTour = true
             transition(to: .tour)
+        }
+    }
+
+    private func openProfile(_ handle: String) {
+        Task { @MainActor in
+            if handle == ProfileStore.shared.profile.handle {
+                selectedTab = .me
+                return
+            }
+            do {
+                if let user = try await socialStore.collector(handle: handle) {
+                    linkedCollector = user
+                } else {
+                    invitationMessage = "No one on MONO has the handle @\(handle) right now."
+                }
+            } catch {
+                invitationMessage = "Couldn't open @\(handle). \(error.localizedDescription)"
+            }
         }
     }
 

@@ -17,8 +17,29 @@ final class SocialStore: ObservableObject {
     @Published var conversations: [ChatConversation]
     @Published var messages: [ChatMessage]
 
-    /// Collectors the user has sent a friend request to (local only for now).
+    /// Collectors the user has sent a friend request to, still waiting.
     @Published private(set) var sentRequestIDs: Set<UUID> = []
+
+    // MARK: Friends (Firestore: friendships/, profiles/)
+
+    enum FriendsLoadState: Equatable {
+        case loading
+        case ready
+        case failed(String)
+    }
+
+    @Published private(set) var friendsState: FriendsLoadState = .ready
+    /// Shown by the Friends screens when an add / accept / remove fails.
+    @Published var friendActionError: String?
+    /// Users with an add / accept / remove in flight (no double taps).
+    @Published private(set) var busyUserIDs: Set<UUID> = []
+    @Published private(set) var friendSince: [UUID: Date] = [:]
+    private var friendshipListener: ListenerRegistration?
+    private var uidBySocialID: [UUID: String] = [:]
+    private var knownUsers: [UUID: SocialUser] = [:]
+    private var collectionMembers: [UUID: SocialUser] = [:]
+    private var directoryCache: [String: DirectoryProfile] = [:]
+    private var lastPublishedStats: String?
 
     init() {
         let mina = DemoCollectors.mina
@@ -141,7 +162,8 @@ final class SocialStore: ObservableObject {
         sharedItemListeners.values.forEach { $0.remove() }
         sharedItemListeners = [:]; metadata = [:]; cloudItems = [:]
         cloudUID = uid
-        sharedCollections = []; friends = []; friendRequests = []
+        observeFriendships(uid: uid)
+        sharedCollections = []
         conversations = []; messages = []; cloudError = nil; cloudBusy = false
         guard let uid else { return }
         collectionsListener = Firestore.firestore().collection("sharedCollections")
@@ -182,7 +204,9 @@ final class SocialStore: ObservableObject {
                         self.metadata.removeValue(forKey: id)
                     }
                     self.sharedCollections = result.sorted { $0.updatedAt > $1.updatedAt }
-                    self.friends = Array(members.values).sorted { $0.name < $1.name }
+                    // Collection members aren't automatically friends; they
+                    // are kept only so avatars and names can be shown.
+                    self.collectionMembers = members
                 }
             }
     }
@@ -246,21 +270,52 @@ final class SocialStore: ObservableObject {
             throw CollectionStore.CloudFailure.message("Paste a valid MONO invitation link or code.")
         }
         let db = Firestore.firestore()
-        let invite = try await db.collection("invites").document(token).getDocument()
+        let invite: DocumentSnapshot
+        do { invite = try await db.collection("invites").document(token).getDocument() }
+        catch where SocialDirectoryError.isPermission(error) {
+            throw CollectionStore.CloudFailure.message("You don't have permission to open this invitation.")
+        }
         guard let collectionID = invite.data()?["collectionID"] as? String else {
-            throw CollectionStore.CloudFailure.message("This invitation is unavailable.")
+            throw CollectionStore.CloudFailure.message("This invitation has expired or was cancelled. Ask for a new link.")
         }
         guard cloudUID == uid else { throw CancellationError() }
-        let label = Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector"
-        try await db.collection("sharedCollections").document(collectionID).updateData([
-            "memberUIDs": FieldValue.arrayUnion([uid]),
-            "joinProof": token,
-            "memberNames." + uid: label
-        ])
+        if let id = UUID(uuidString: collectionID), sharedCollections.contains(where: { $0.id == id }) {
+            throw CollectionStore.CloudFailure.message("You're already in this collection.")
+        }
+        let label = ProfileStore.shared.profile.name.isEmpty
+            ? (Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector")
+            : ProfileStore.shared.profile.name
+        do {
+            try await db.collection("sharedCollections").document(collectionID).updateData([
+                "memberUIDs": FieldValue.arrayUnion([uid]),
+                "joinProof": token,
+                "memberNames." + uid: label
+            ])
+        } catch where SocialDirectoryError.isPermission(error) {
+            throw CollectionStore.CloudFailure.message("You can't join this collection. It may be full, or the invitation was replaced.")
+        }
     }
 
     private func publishSharedItem(_ id: UUID, collectionID: UUID) async {
-        guard let uid = cloudUID, var item = personalStore?.item(id: id) else { return }
+        do { try await publishSharedItemOrThrow(id, collectionID: collectionID) }
+        catch { if cloudUID != nil { cloudError = error.localizedDescription } }
+    }
+
+    /// Adds several of the user's own objects to a shared collection and
+    /// reports failure to the caller, so the picker can keep its selection.
+    func addItems(_ ids: [UUID], to collectionID: UUID) async throws {
+        guard cloudStarted else {
+            ids.forEach { addItem($0, to: collectionID) }
+            return
+        }
+        for id in ids { try await publishSharedItemOrThrow(id, collectionID: collectionID) }
+    }
+
+    private func publishSharedItemOrThrow(_ id: UUID, collectionID: UUID) async throws {
+        guard let uid = cloudUID else { throw CollectionStore.CloudFailure.message("Please sign in first.") }
+        guard var item = personalStore?.item(id: id) else {
+            throw CollectionStore.CloudFailure.message("That object is no longer in your collection.")
+        }
         do {
             // Shared copies have a bounded preview; never grant access to the owner's private bucket.
             let source = item.uploadedImage ?? item.imageName.flatMap { UIImage(named: $0) }
@@ -284,7 +339,10 @@ final class SocialStore: ObservableObject {
             batch.setData(data, forDocument: root.collection("items").document(id.uuidString))
             batch.updateData(["itemIDs": FieldValue.arrayUnion([id.uuidString]), "updatedAt": FieldValue.serverTimestamp()], forDocument: root)
             try await batch.commit()
-        } catch { if cloudUID == uid { cloudError = error.localizedDescription } }
+        } catch {
+            guard cloudUID == uid else { throw CancellationError() }
+            throw error
+        }
     }
 
     // MARK: - Users
@@ -294,7 +352,9 @@ final class SocialStore: ObservableObject {
             ?? friendRequests
                 .map(\.sender)
                 .first { $0.id == id }
-            ?? DemoCollectors.all.first { $0.id == id }
+            ?? knownUsers[id]
+            ?? collectionMembers[id]
+            ?? (cloudStarted ? nil : DemoCollectors.all.first { $0.id == id })
     }
 
     func members(
@@ -319,29 +379,247 @@ final class SocialStore: ObservableObject {
         sentRequestIDs.contains(userID)
     }
 
-    // TODO(Fei): replace with the Firebase friend-request call.
     func sendFriendRequest(to user: SocialUser) {
-        guard isFriend(user.id) == false else { return }
-        sentRequestIDs.insert(user.id)
+        guard !isFriend(user.id), !hasSentRequest(to: user.id) else { return }
+        guard cloudStarted else { sentRequestIDs.insert(user.id); return }
+        if let incoming = incomingRequest(from: user.id) {
+            // They already asked: adding them back means accepting.
+            acceptFriendRequest(incoming)
+            return
+        }
+        guard let other = uidBySocialID[user.id] else {
+            friendActionError = "Couldn't find this collector. Search for them again."
+            return
+        }
+        runFriendAction(for: user.id, optimistic: { $0.sentRequestIDs.insert(user.id) },
+                        undo: { $0.sentRequestIDs.remove(user.id) }) { store in
+            guard let me = try await store.myDirectoryProfile() else {
+                throw CollectionStore.CloudFailure.message("Add a handle to your profile first, so they can see who's asking.")
+            }
+            let target = store.directoryCache[other]
+                ?? DirectoryProfile(uid: other, name: user.name, handle: HandleRules.normalized(user.handle))
+            try await SocialDirectory.sendRequest(to: target, from: me)
+        }
     }
 
     func cancelFriendRequest(to user: SocialUser) {
-        sentRequestIDs.remove(user.id)
+        guard cloudStarted else { sentRequestIDs.remove(user.id); return }
+        guard let other = uidBySocialID[user.id], let me = SocialDirectory.currentUID else { return }
+        runFriendAction(for: user.id, optimistic: { $0.sentRequestIDs.remove(user.id) },
+                        undo: { $0.sentRequestIDs.insert(user.id) }) { _ in
+            try await SocialDirectory.remove(pairID: SocialDirectory.pairID(me, other))
+        }
     }
 
-    func acceptFriendRequest(_ request: FriendRequest) {
-        if friends.contains(where: { $0.id == request.sender.id }) == false {
-            friends.append(request.sender)
+    func removeFriend(_ user: SocialUser) {
+        guard cloudStarted else { friends.removeAll { $0.id == user.id }; return }
+        guard let other = uidBySocialID[user.id], let me = SocialDirectory.currentUID else { return }
+        let previous = friends
+        runFriendAction(for: user.id, optimistic: { $0.friends.removeAll { $0.id == user.id } },
+                        undo: { $0.friends = previous }) { _ in
+            try await SocialDirectory.remove(pairID: SocialDirectory.pairID(me, other))
         }
+    }
 
-        friendRequests.removeAll {
-            $0.id == request.id
+    func isBusy(_ userID: UUID) -> Bool { busyUserIDs.contains(userID) }
+
+    func acceptFriendRequest(_ request: FriendRequest) {
+        guard cloudStarted else {
+            if friends.contains(where: { $0.id == request.sender.id }) == false {
+                friends.append(request.sender)
+            }
+            friendRequests.removeAll { $0.id == request.id }
+            return
+        }
+        guard let other = uidBySocialID[request.sender.id], let me = SocialDirectory.currentUID else { return }
+        let previousFriends = friends, previousRequests = friendRequests
+        runFriendAction(for: request.sender.id, optimistic: { store in
+            store.friendRequests.removeAll { $0.id == request.id }
+            if !store.friends.contains(where: { $0.id == request.sender.id }) { store.friends.append(request.sender) }
+        }, undo: { store in
+            store.friends = previousFriends; store.friendRequests = previousRequests
+        }) { _ in
+            try await SocialDirectory.accept(pairID: SocialDirectory.pairID(me, other))
         }
     }
 
     func declineFriendRequest(_ request: FriendRequest) {
-        friendRequests.removeAll {
-            $0.id == request.id
+        guard cloudStarted else {
+            friendRequests.removeAll { $0.id == request.id }
+            return
+        }
+        guard let other = uidBySocialID[request.sender.id], let me = SocialDirectory.currentUID else { return }
+        let previous = friendRequests
+        runFriendAction(for: request.sender.id, optimistic: { $0.friendRequests.removeAll { $0.id == request.id } },
+                        undo: { $0.friendRequests = previous }) { _ in
+            try await SocialDirectory.remove(pairID: SocialDirectory.pairID(me, other))
+        }
+    }
+
+    /// Updates the screen right away, then writes to Firestore. The
+    /// friendships listener has the final say; on failure the change is
+    /// undone and the reason shown.
+    private func runFriendAction(
+        for userID: UUID,
+        optimistic: (SocialStore) -> Void,
+        undo: @escaping (SocialStore) -> Void,
+        _ work: @escaping (SocialStore) async throws -> Void
+    ) {
+        guard !busyUserIDs.contains(userID) else { return }
+        busyUserIDs.insert(userID)
+        friendActionError = nil
+        optimistic(self)
+        let uid = cloudUID
+        Task { @MainActor in
+            defer { self.busyUserIDs.remove(userID) }
+            do {
+                try await work(self)
+                Haptics.light()
+            } catch {
+                guard self.cloudUID == uid else { return }
+                undo(self)
+                self.friendActionError = SocialDirectoryError.isPermission(error)
+                    ? "That didn't go through. They may have already sent you a request — check Requests. If this keeps happening, the server's friend rules may not be published yet."
+                    : error.localizedDescription
+            }
+        }
+    }
+
+    // MARK: - Directory
+
+    /// Search registered collectors by handle (P10). Results can be added.
+    func searchDirectory(_ query: String) async throws -> [SocialUser] {
+        guard cloudStarted else {
+            return DemoCollectors.all.filter { HandleRules.normalized($0.handle).hasPrefix(query) }
+        }
+        return try await SocialDirectory.search(prefix: query).map(register)
+    }
+
+    /// A collector from a shared profile link (mono://u/handle).
+    func collector(handle: String) async throws -> SocialUser? {
+        guard let profile = try await SocialDirectory.profile(handle: handle) else { return nil }
+        return register(profile)
+    }
+
+    func directoryProfile(for userID: UUID) -> DirectoryProfile? {
+        uidBySocialID[userID].flatMap { directoryCache[$0] }
+    }
+
+    func isCurrentUser(_ userID: UUID) -> Bool { userID == currentUserID }
+
+    @discardableResult
+    private func register(_ profile: DirectoryProfile) -> SocialUser {
+        directoryCache[profile.uid] = profile
+        let user = Self.socialUser(profile)
+        uidBySocialID[user.id] = profile.uid
+        knownUsers[user.id] = user
+        return user
+    }
+
+    private static func socialUser(_ profile: DirectoryProfile) -> SocialUser {
+        let palette = ["D5B99C", "B84631", "727B70", "262624", "C8B7A8", "706B63", "536D78", "A68E9A"]
+        let hash = profile.uid.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
+        return SocialUser(
+            id: socialID(profile.uid), name: profile.name,
+            handle: HandleRules.display(profile.handle), location: profile.location, bio: profile.bio,
+            interests: [], objectCount: profile.objectCount, collectionCount: profile.collectionCount,
+            sharedCollectionCount: 0,
+            avatarColorA: palette[hash % palette.count], avatarColorB: palette[(hash / 8 + 3) % palette.count])
+    }
+
+    private func myDirectoryProfile() async throws -> DirectoryProfile? {
+        guard let uid = SocialDirectory.currentUID else { throw SocialDirectoryError.notSignedIn }
+        if let cached = directoryCache[uid] { return cached }
+        if let remote = try await SocialDirectory.profile(uid: uid) {
+            directoryCache[uid] = remote
+            return remote
+        }
+        return nil
+    }
+
+    /// Keeps the public counts on profiles/{uid} current. Quietly does
+    /// nothing if the user has no public profile yet.
+    func publishStats(objectCount: Int, collectionCount: Int,
+                      publicCollections: [DirectoryProfile.PublicCollection]) {
+        guard cloudStarted, cloudUID != nil else { return }
+        let key = "\(objectCount)|\(collectionCount)|\(publicCollections.map { "\($0.name):\($0.count)" })"
+        guard key != lastPublishedStats else { return }
+        lastPublishedStats = key
+        Task { @MainActor in
+            do {
+                try await SocialDirectory.updateStats(objectCount: objectCount, collectionCount: collectionCount,
+                                                      publicCollections: publicCollections)
+            } catch {
+                // No public profile yet (no handle) or offline: try again next time.
+                if self.lastPublishedStats == key { self.lastPublishedStats = nil }
+            }
+        }
+    }
+
+    // MARK: - Friendships listener
+
+    private func observeFriendships(uid: String?) {
+        friendshipListener?.remove()
+        friendshipListener = nil
+        friends = []; friendRequests = []; sentRequestIDs = []; friendSince = [:]
+        busyUserIDs = []; friendActionError = nil; lastPublishedStats = nil
+        directoryCache = [:]; knownUsers = [:]; uidBySocialID = [:]
+        guard let uid else { friendsState = .ready; return }
+        friendsState = .loading
+        friendshipListener = SocialDirectory.friendships(of: uid).addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self, self.cloudUID == uid else { return }
+                if let error {
+                    self.friendsState = .failed(SocialDirectoryError.isPermission(error)
+                        ? SocialDirectoryError.notSetUp.localizedDescription
+                        : error.localizedDescription)
+                    return
+                }
+                guard let snapshot else { return }
+                self.applyFriendships(snapshot.documents.map { ($0.documentID, $0.data()) }, uid: uid)
+                self.friendsState = .ready
+            }
+        }
+    }
+
+    private func applyFriendships(_ docs: [(String, [String: Any])], uid: String, fetchMissing: Bool = true) {
+        var accepted: [SocialUser] = [], incoming: [FriendRequest] = []
+        var sent: Set<UUID> = [], since: [UUID: Date] = [:]
+        var missing: [String] = []
+        for (pairID, data) in docs {
+            guard let from = data["fromUID"] as? String, let to = data["toUID"] as? String else { continue }
+            let other = from == uid ? to : from
+            let fallback = DirectoryProfile(
+                uid: other,
+                name: (from == uid ? data["toName"] : data["fromName"]) as? String ?? "Collector",
+                handle: (from == uid ? data["toHandle"] : data["fromHandle"]) as? String ?? "")
+            if directoryCache[other] == nil { missing.append(other) }
+            let user = register(directoryCache[other] ?? fallback)
+            switch data["status"] as? String ?? "" {
+            case "accepted":
+                accepted.append(user)
+                since[user.id] = (data["acceptedAt"] as? Timestamp)?.dateValue()
+            case "pending" where to == uid:
+                incoming.append(FriendRequest(id: Self.socialID(pairID),
+                                              sender: user, mutualCollectionCount: 0, mutualInterestCount: 0))
+            case "pending":
+                sent.insert(user.id)
+            default: break
+            }
+        }
+        friends = accepted.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        friendRequests = incoming
+        sentRequestIDs = sent
+        friendSince = since
+        // Fill in bios and counts for people we only know by name so far.
+        guard fetchMissing, !missing.isEmpty else { return }
+        Task { @MainActor in
+            for other in missing {
+                guard self.cloudUID == uid, let profile = try? await SocialDirectory.profile(uid: other) else { continue }
+                self.directoryCache[other] = profile
+            }
+            guard self.cloudUID == uid else { return }
+            self.applyFriendships(docs, uid: uid, fetchMissing: false)
         }
     }
 

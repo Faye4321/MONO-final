@@ -6,11 +6,13 @@ import CryptoKit
 
 enum CloudStorage {
     static let bucket = "collectible-images"
+    static let projectURL = URL(string: "https://etkucvnppsvgpqytlhwe.supabase.co")!
+
+    /// The storage host, for error messages.
+    static var hostDescription: String { projectURL.host ?? projectURL.absoluteString }
 
     static let client = SupabaseClient(
-        supabaseURL: URL(
-            string: "https://etkucvnppsvgpqytlhwe.supabase.co"
-        )!,
+        supabaseURL: projectURL,
         supabaseKey: "sb_publishable_gcvtomO0PrDmrIRWtfFxJg_UutZyfJp",
         options: SupabaseClientOptions(
             auth: .init(
@@ -29,91 +31,203 @@ enum CloudStorage {
 
 import SwiftUI
 
+/// Profile ▸ Cloud & shared collections. Sits at the bottom of Profile,
+/// collapsed to a one-line status; details, retry and Join collection are
+/// inside. Sign out lives in Settings. (Chloe's P05–P09.)
 struct CloudAccountPanel: View {
     @EnvironmentObject private var store: CollectionStore
     @EnvironmentObject private var socialStore: SocialStore
     @EnvironmentObject private var profileStore: CloudProfileStore
+    @State private var expanded = false
     @State private var invitation = ""
-    @State private var message: String?
+    @State private var joinMessage: String?
+    @State private var joinFailed = false
     @State private var joining = false
+    @State private var retrying = false
     @State private var confirmImport = false
 
-    private var needsRetry: Bool {
-        store.cloudStatus != "Up to date"
-            || store.cloudError != nil || store.catalogError != nil
-            || profileStore.errorMessage != nil || socialStore.cloudError != nil
+    /// Overall state: profile and shared-collection errors count as failures.
+    private var summary: CollectionStore.SyncSummary {
+        if profileStore.isSaving || socialStore.cloudBusy { return .syncing }
+        let base = store.syncSummary
+        if base == .upToDate, profileStore.errorMessage != nil || socialStore.cloudError != nil { return .failed }
+        return base
+    }
+
+    private var summaryColor: Color {
+        switch summary {
+        case .upToDate: Color.green
+        case .syncing: ArchiveTheme.catalogGray
+        default: ArchiveTheme.collectedRed
+        }
+    }
+
+    /// Technical details, shown only when the panel is open.
+    private var problems: [String] {
+        var list: [String] = []
+        if let error = store.cloudError { list.append(error) }
+        if let error = store.catalogError { list.append(error) }
+        if let error = profileStore.errorMessage { list.append(error) }
+        if let error = socialStore.cloudError { list.append(error) }
+        if let reason = store.photoFailures.values.first { list.append(reason) }
+        return list
     }
 
     var body: some View {
-        DisclosureGroup("Cloud & shared collections") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(FirebaseAuth.Auth.auth().currentUser?.email ?? "Not signed in")
-                    .font(.caption)
-                    .foregroundStyle(ArchiveTheme.catalogGray)
-                Text(store.cloudStatus)
-                    .font(.caption)
-                    .foregroundStyle(ArchiveTheme.ink)
-                if profileStore.isSaving {
-                    ProgressView("Saving profile…")
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "icloud")
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(ArchiveTheme.ink)
-                }
-                if let error = profileStore.errorMessage {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                }
-                if store.catalogSyncing { ProgressView("Saving collections…") }
-                if let error = store.catalogError { Text(error).font(.caption).foregroundStyle(.red) }
-                if let error = store.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
-                if let error = socialStore.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
-                if socialStore.cloudBusy { ProgressView("Creating collection…") }
-                // Only offer a retry when something is actually waiting or failed.
-                if needsRetry {
-                    Button("Retry sync") {
-                        store.retryCloudSync()
-                        profileStore.retry()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("CLOUD & SHARED COLLECTIONS")
+                            .font(ArchiveTheme.label(10))
+                            .tracking(0.6)
+                            .foregroundStyle(ArchiveTheme.ink)
+                        HStack(spacing: 6) {
+                            if summary == .syncing {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Circle().fill(summaryColor).frame(width: 6, height: 6)
+                            }
+                            Text(summary.title)
+                                .font(ArchiveTheme.body(12))
+                                .foregroundStyle(summary.isProblem ? ArchiveTheme.collectedRed : ArchiveTheme.catalogGray)
+                        }
                     }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
                 }
-                if store.hasLegacyArchive {
-                    Button("Import collections from before this update") { confirmImport = true }
-                }
-                Divider()
-                TextField("Paste a collection invitation link or code", text: $invitation)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                Button(joining ? "Joining…" : "Join collection") {
-                    joining = true
-                    Task { @MainActor in
-                        defer { joining = false }
-                        do {
-                            try await socialStore.joinCollection(invitation: invitation)
-                            invitation = ""
-                            message = "Joined. Your shared collection appears below."
-                        } catch { message = error.localizedDescription }
-                    }
-                }
-                .disabled(joining || invitation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Sign out", role: .destructive) {
-                    do { try FirebaseAuth.Auth.auth().signOut() }
-                    catch { message = error.localizedDescription }
-                }
+                .contentShape(Rectangle())
             }
-            .padding(.top, 12)
-            .font(.subheadline)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cloud and shared collections, \(summary.title)")
+            .accessibilityHint(expanded ? "Hides details" : "Shows sync details and Join collection")
+
+            if expanded { details.padding(.top, 14) }
         }
-        .environment(\.colorScheme, .light)
         .padding(16)
-        .background(.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.top, 16)
-        .alert("Cloud", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: { Text(message ?? "") }
+        .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.top, 26)
         .confirmationDialog("Import this device's old collection into the signed-in account?",
                             isPresented: $confirmImport, titleVisibility: .visible) {
             Button("Import into this account") { store.importLegacyArchive() }
         }
     }
-}
 
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(FirebaseAuth.Auth.auth().currentUser?.email ?? "Not signed in")
+                .font(ArchiveTheme.body(12))
+                .foregroundStyle(ArchiveTheme.catalogGray)
+
+            if case .photosPending(let count) = summary {
+                Text("Your objects and memories are synced. \(count == 1 ? "1 photo" : "\(count) photos") couldn't be downloaded to this phone yet; the ones already here are kept.")
+                    .font(ArchiveTheme.body(12))
+                    .foregroundStyle(ArchiveTheme.ink)
+            }
+
+            if !problems.isEmpty {
+                DisclosureGroup("Details") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(problems, id: \.self) { line in
+                            Text(line).font(.caption2).foregroundStyle(ArchiveTheme.catalogGray)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(.top, 6)
+                }
+                .font(ArchiveTheme.body(12))
+                .tint(ArchiveTheme.ink)
+            }
+
+            if summary.isProblem {
+                Button {
+                    retry()
+                } label: {
+                    Label(retrying ? "Retrying…" : "Retry sync", systemImage: "arrow.clockwise")
+                        .font(ArchiveTheme.label(11))
+                }
+                .disabled(retrying || summary == .syncing)
+            }
+
+            if store.hasLegacyArchive {
+                Button("Import collections from before this update") { confirmImport = true }
+                    .font(ArchiveTheme.body(13))
+            }
+
+            Divider()
+
+            Text("JOIN A SHARED COLLECTION")
+                .font(ArchiveTheme.label(10))
+                .tracking(0.6)
+                .foregroundStyle(ArchiveTheme.catalogGray)
+            TextField("Paste an invitation link or code", text: $invitation)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(ArchiveTheme.body(13))
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .background(Color.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 10))
+                .onChange(of: invitation) { _, _ in joinMessage = nil }
+            Button {
+                join()
+            } label: {
+                Text(joining ? "Joining…" : "Join collection")
+                    .font(ArchiveTheme.label(11))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .background(ArchiveTheme.collectedRed.opacity(canJoin ? 1 : 0.4), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canJoin)
+            if let joinMessage {
+                Text(joinMessage)
+                    .font(ArchiveTheme.body(12))
+                    .foregroundStyle(joinFailed ? ArchiveTheme.collectedRed : Color.green)
+            }
+        }
+    }
+
+    private var canJoin: Bool {
+        !joining && !invitation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func retry() {
+        retrying = true
+        store.retryCloudSync()
+        profileStore.retry()
+        socialStore.cloudError = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            retrying = false
+        }
+    }
+
+    private func join() {
+        joining = true
+        joinMessage = nil
+        Task { @MainActor in
+            defer { joining = false }
+            do {
+                try await socialStore.joinCollection(invitation: invitation)
+                invitation = ""
+                joinFailed = false
+                joinMessage = "Joined. It's in Shared Collections above."
+            } catch {
+                joinFailed = true
+                joinMessage = error.localizedDescription
+            }
+        }
+    }
+}
 
 /// Account-owned profile data shared by Profile and registration.
 struct CloudUserProfile: Codable, Equatable {

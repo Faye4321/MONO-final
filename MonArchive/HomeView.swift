@@ -7,7 +7,7 @@ struct HomeView: View {
     @EnvironmentObject private var store: CollectionStore
     @StateObject private var explore: ExploreStore
     @AppStorage(CollectingPreferences.storageKey) private var collectsRaw = ""
-    @State private var category: CollectionCategory?
+    @State private var showingFirstUpload = false
     let onProfileTapped: () -> Void
     let onOpenLab: () -> Void
 
@@ -27,9 +27,9 @@ struct HomeView: View {
     private var ranked: [ShopPick] {
         ExploreQuery.ranked(explore.picks, preferred: preferred, saved: explore.saved, collected: collected)
     }
-    private var filtered: [ShopPick] {
-        ExploreQuery.results(ranked, query: "", category: category, sort: .recommended)
-    }
+    /// A new account has nothing of its own yet, so there is nothing to
+    /// base recommendations on: show an upload prompt instead (H01).
+    private var hasOwnObjects: Bool { !store.activeItems.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -63,6 +63,12 @@ struct HomeView: View {
         }
         .environmentObject(explore)
         .tint(BrandColor.collectedRed)
+        .fullScreenCover(isPresented: $showingFirstUpload) {
+            CreateFlowView(
+                onSaved: { showingFirstUpload = false },
+                onCancel: { showingFirstUpload = false }
+            )
+        }
         .task { await explore.loadIfNeeded() }
         .alert(item: $explore.mutationIssue) { issue in
             Alert(
@@ -139,6 +145,14 @@ struct HomeView: View {
                 Text("PICKED FOR YOU").font(.caption.weight(.medium)).tracking(1)
                     .foregroundStyle(BrandColor.collectedRed)
             }
+            if !hasOwnObjects {
+                ExploreStateView(
+                    symbol: "square.and.arrow.up",
+                    title: "Add your first object",
+                    message: "Recommendations are picked from what you collect. Add an object and finds for you will start to appear here.",
+                    actionTitle: "Add an object"
+                ) { showingFirstUpload = true }
+            } else {
             switch explore.catalogState {
             case .idle, .loading:
                 ExploreLoadingView()
@@ -148,23 +162,17 @@ struct HomeView: View {
                 }
             case .loaded:
                 if ranked.isEmpty {
-                    ExploreStateView(symbol: "sparkle.magnifyingglass", title: "New finds are on their way", message: "There’s nothing to recommend just yet. Check back soon.", actionTitle: "Refresh finds") {
+                    ExploreStateView(symbol: "sparkle.magnifyingglass", title: "No recommendations yet", message: "Nothing matches your collection just yet. Check back soon.", actionTitle: "Refresh finds") {
                         Task { await explore.loadCatalog() }
                     }
                 } else {
+                    // The carousel is the only recommendation block on Explore;
+                    // the Browse Finds grid below it was removed (H02–H04).
                     ExploreFeaturedCarousel(picks: Array(ranked.prefix(6)), preferred: preferred, collected: collected)
-                    Text("Selected using your interests, wishlist and collection categories. Curated sample listings; verify prices on eBay.")
+                    Text("Selected using your interests, wishlist and collection categories. Verify prices on eBay.")
                         .font(.footnote).foregroundStyle(BrandColor.catalogGray)
-                    HStack {
-                        Text("BROWSE FINDS").font(.caption.weight(.medium)).tracking(0.7)
-                        Spacer()
-                        Text("\(filtered.count) FINDS").font(.caption).foregroundStyle(BrandColor.catalogGray)
-                    }
-                    ExploreCategoryFilter(category: $category)
-                    if filtered.isEmpty {
-                        ExploreStateView(symbol: "tray", title: "No finds in this category yet", message: "Try browsing all finds.", actionTitle: "Show all finds") { category = nil }
-                    } else { ExplorePickGrid(picks: filtered) }
                 }
+            }
             }
             if case .failed = explore.wishlistState {
                 NavigationLink { ExploreWishlistView() } label: {
@@ -259,6 +267,9 @@ private struct ExploreFeaturedCarousel: View {
 // creating an object or from an object's page. The ME page keeps its own copy.
 private struct HomeJourneySection: View {
     @EnvironmentObject private var store: CollectionStore
+    @Environment(\.scenePhase) private var scenePhase
+    /// "2026-11" when the stack was last put on the current month.
+    @State private var positionedMonth = ""
 
     @State private var year = Calendar.current.component(.year, from: .now)
     @State private var focusedIndex = 0
@@ -324,7 +335,11 @@ private struct HomeJourneySection: View {
         .onAppear {
             guard !hasPositioned else { return }
             hasPositioned = true
-            focusedIndex = MemoryCalendar.defaultIndex(in: pages)
+            showCurrentMonth()
+        }
+        // Coming back in a new month puts that month on top again (H06).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { showCurrentMonthIfItChanged() }
         }
         .onChange(of: year) {
             focusedIndex = MemoryCalendar.defaultIndex(in: pages)
@@ -338,6 +353,22 @@ private struct HomeJourneySection: View {
         .fullScreenCover(item: $flip) { request in
             CalendarFlipView(pages: pages, focusedIndex: $focusedIndex, startIndex: request.startIndex)
         }
+    }
+
+    private static func monthKey(_ date: Date = .now) -> String {
+        let parts = Calendar.current.dateComponents([.year, .month], from: date)
+        return "\(parts.year ?? 0)-\(parts.month ?? 0)"
+    }
+
+    private func showCurrentMonth() {
+        year = Calendar.current.component(.year, from: .now)
+        focusedIndex = MemoryCalendar.defaultIndex(in: MemoryCalendar.pages(for: year, source: store.calendarSource))
+        positionedMonth = Self.monthKey()
+    }
+
+    private func showCurrentMonthIfItChanged() {
+        guard hasPositioned, positionedMonth != Self.monthKey() else { return }
+        showCurrentMonth()
     }
 
     private var yearSwitcher: some View {
