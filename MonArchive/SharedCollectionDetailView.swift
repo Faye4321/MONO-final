@@ -43,7 +43,7 @@ struct SharedCollectionDetailView: View {
 
                     }
                     .padding(.horizontal, 22)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, MonoTabBar.contentBottomInset)
                 }
             } else {
                 unavailableView

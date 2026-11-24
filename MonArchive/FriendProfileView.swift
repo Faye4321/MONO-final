@@ -46,7 +46,7 @@ struct FriendProfileView: View {
                     sharedCollectionsSection
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 32)
+                .padding(.bottom, MonoTabBar.contentBottomInset)
             }
             .scrollIndicators(.hidden)
         }

@@ -56,7 +56,7 @@ struct FriendsView: View {
                     }
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 32)
+                .padding(.bottom, MonoTabBar.contentBottomInset)
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
             }

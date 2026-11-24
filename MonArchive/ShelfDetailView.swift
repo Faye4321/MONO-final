@@ -25,7 +25,7 @@ struct ShelfDetailView: View {
                     shelfContent
                 }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 36)
+                .padding(.bottom, MonoTabBar.contentBottomInset)
             }
         }
         .foregroundStyle(ArchiveTheme.ink)
