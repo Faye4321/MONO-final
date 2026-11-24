@@ -32,6 +32,7 @@ struct MonArchiveApp: App {
                 .task {
                     profileStore.startCloud()
                     ProfileStore.shared.connect(cloud: profileStore)
+                    AccountPreferencesSync.shared.start()
                     store.startCloud()
                     socialStore.startCloud(collectionStore: store)
                 }

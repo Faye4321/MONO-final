@@ -607,7 +607,8 @@ final class SocialStore: ObservableObject {
             handle: HandleRules.display(profile.handle), location: profile.location, bio: profile.bio,
             interests: [], objectCount: profile.objectCount, collectionCount: profile.collectionCount,
             sharedCollectionCount: 0,
-            avatarColorA: palette[hash % palette.count], avatarColorB: palette[(hash / 8 + 3) % palette.count])
+            avatarColorA: palette[hash % palette.count], avatarColorB: palette[(hash / 8 + 3) % palette.count],
+            avatarData: profile.avatar)
     }
 
     private func myDirectoryProfile() async throws -> DirectoryProfile? {

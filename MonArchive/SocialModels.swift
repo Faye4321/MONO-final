@@ -16,6 +16,8 @@ struct SocialUser: Identifiable, Hashable, Codable {
 
     var avatarColorA: String
     var avatarColorB: String
+    /// The collector's own profile photo, when they set one.
+    var avatarData: Data? = nil
 
     init(
         id: UUID = UUID(),
@@ -28,8 +30,10 @@ struct SocialUser: Identifiable, Hashable, Codable {
         collectionCount: Int,
         sharedCollectionCount: Int,
         avatarColorA: String,
-        avatarColorB: String
+        avatarColorB: String,
+        avatarData: Data? = nil
     ) {
+        self.avatarData = avatarData
         self.id = id
         self.name = name
         self.handle = handle

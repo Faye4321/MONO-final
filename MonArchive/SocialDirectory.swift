@@ -31,6 +31,8 @@ struct DirectoryProfile: Equatable, Identifiable {
     var objectCount = 0
     var collectionCount = 0
     var publicCollections: [PublicCollection] = []
+    /// Small profile photo (AvatarCloud), if the user set one.
+    var avatar: Data?
 
     var id: String { uid }
 
@@ -50,6 +52,7 @@ struct DirectoryProfile: Equatable, Identifiable {
         location = data["location"] as? String ?? ""
         objectCount = data["objectCount"] as? Int ?? 0
         collectionCount = data["collectionCount"] as? Int ?? 0
+        avatar = data["avatar"] as? Data
         publicCollections = (data["publicCollections"] as? [[String: Any]] ?? []).compactMap { entry in
             guard let name = entry["name"] as? String else { return nil }
             return PublicCollection(name: name, count: entry["count"] as? Int ?? 0,

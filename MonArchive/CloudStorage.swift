@@ -401,3 +401,360 @@ final class CloudProfileStore: ObservableObject {
         }
     }
 }
+
+// MARK: - Account data that used to live only on this device
+
+/// Which account the device-only copy of a feature belongs to. Local copies
+/// are uploaded only to the account that made them; a different account
+/// signing in starts from its own cloud copy instead.
+enum AccountLocalData {
+    private static func key(_ feature: String) -> String { "mono.localOwner." + feature }
+
+    /// True if the local copy is this account's, or predates accounts.
+    static func belongs(to uid: String, _ feature: String) -> Bool {
+        let owner = UserDefaults.standard.string(forKey: key(feature))
+        return owner == nil || owner == uid
+    }
+
+    static func claim(_ uid: String, _ feature: String) {
+        UserDefaults.standard.set(uid, forKey: key(feature))
+    }
+}
+
+/// Collecting interests, default visibility and each collection's
+/// visibility, kept in users/{uid}/settings/preferences. The app still reads
+/// them from UserDefaults; this mirrors those keys both ways.
+@MainActor
+final class AccountPreferencesSync {
+    static let shared = AccountPreferencesSync()
+
+    struct Values: Equatable {
+        var collects: String
+        var defaultVisibility: String
+        var visibility: [String: String]
+
+        static let empty = Values(collects: "", defaultVisibility: CollectionVisibility.isPrivate.rawValue, visibility: [:])
+    }
+
+    private static let visibilityKey = "profile.collectionVisibility"
+    private var uid: String?
+    private var received = false
+    private var applying = false
+    private var lastSynced: Values?
+    private var listener: ListenerRegistration?
+    private var authHandle: AuthStateDidChangeListenerHandle?
+    private var defaultsObserver: NSObjectProtocol?
+
+    func start() {
+        guard authHandle == nil else { return }
+        authHandle = FirebaseAuth.Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            let uid = user?.uid
+            Task { @MainActor in self?.activate(uid) }
+        }
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.pushIfChanged() }
+        }
+    }
+
+    private func document(_ uid: String) -> DocumentReference {
+        Firestore.firestore().collection("users").document(uid).collection("settings").document("preferences")
+    }
+
+    static var local: Values {
+        let defaults = UserDefaults.standard
+        let visibility = defaults.data(forKey: visibilityKey)
+            .flatMap { try? JSONDecoder().decode([String: CollectionVisibility].self, from: $0) } ?? [:]
+        return Values(
+            collects: defaults.string(forKey: CollectingPreferences.storageKey) ?? "",
+            defaultVisibility: defaults.string(forKey: ProfileStore.defaultVisibilityKey) ?? CollectionVisibility.isPrivate.rawValue,
+            visibility: visibility.mapValues(\.rawValue)
+        )
+    }
+
+    private func writeLocal(_ values: Values) {
+        applying = true
+        defer { applying = false }
+        let defaults = UserDefaults.standard
+        let visibility = values.visibility.compactMapValues(CollectionVisibility.init(rawValue:))
+        defaults.set(values.collects, forKey: CollectingPreferences.storageKey)
+        defaults.set(values.defaultVisibility, forKey: ProfileStore.defaultVisibilityKey)
+        defaults.set(try? JSONEncoder().encode(visibility), forKey: Self.visibilityKey)
+        ProfileStore.shared.applySyncedVisibility(
+            visibility, defaultVisibility: CollectionVisibility(rawValue: values.defaultVisibility) ?? .isPrivate)
+    }
+
+    private func activate(_ newUID: String?) {
+        guard newUID != uid else { return }
+        listener?.remove()
+        listener = nil
+        uid = newUID
+        received = false
+        lastSynced = nil
+        guard let newUID else { return }
+        Task { await ProfileStore.shared.reload() }  // the avatar belongs to the account too
+        listener = document(newUID).addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self, self.uid == newUID, error == nil, let snapshot else { return }
+                if let data = snapshot.data() {
+                    let values = Values(
+                        collects: data["collects"] as? String ?? "",
+                        defaultVisibility: data["defaultVisibility"] as? String ?? CollectionVisibility.isPrivate.rawValue,
+                        visibility: data["collectionVisibility"] as? [String: String] ?? [:]
+                    )
+                    self.received = true
+                    AccountLocalData.claim(newUID, "preferences")
+                    self.lastSynced = values
+                    if values != Self.local { self.writeLocal(values) }
+                } else if !snapshot.metadata.isFromCache, !self.received {
+                    // Nothing in the cloud yet: keep this device's settings if
+                    // they're this account's (and upload them), otherwise start fresh.
+                    self.received = true
+                    if !AccountLocalData.belongs(to: newUID, "preferences") { self.writeLocal(.empty) }
+                    AccountLocalData.claim(newUID, "preferences")
+                    self.pushIfChanged()
+                }
+            }
+        }
+    }
+
+    private func pushIfChanged() {
+        guard !applying, received, let uid else { return }
+        let values = Self.local
+        guard values != lastSynced else { return }
+        lastSynced = values
+        // Firestore queues the write while offline and sends it later.
+        document(uid).setData([
+            "collects": values.collects,
+            "defaultVisibility": values.defaultVisibility,
+            "collectionVisibility": values.visibility,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]) { [weak self] error in
+            guard error != nil else { return }
+            Task { @MainActor in if self?.uid == uid { self?.lastSynced = nil } }
+        }
+    }
+}
+
+/// The profile photo: a small copy in users/{uid}/settings/avatar (private,
+/// for the user's other devices) and in profiles/{uid}.avatar (friends).
+enum AvatarCloud {
+    enum Remote { case found(name: String, data: Data), none, unavailable }
+
+    static let maxBytes = 150_000
+
+    /// A square-ish 320 px JPEG small enough for a Firestore field.
+    static func thumbnail(_ data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let side: CGFloat = 320
+        let scale = min(1, side / max(image.size.width, image.size.height))
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        for quality in [0.75, 0.5, 0.3] {
+            if let jpeg = resized.jpegData(compressionQuality: quality), jpeg.count <= maxBytes { return jpeg }
+        }
+        return nil
+    }
+
+    private static func privateDocument(_ uid: String) -> DocumentReference {
+        Firestore.firestore().collection("users").document(uid).collection("settings").document("avatar")
+    }
+
+    static func fetch(uid: String) async -> Remote {
+        do {
+            let snapshot = try await privateDocument(uid).getDocument(source: .server)
+            guard let data = snapshot.data()?["data"] as? Data,
+                  let name = snapshot.data()?["name"] as? String else { return .none }
+            return .found(name: name, data: data)
+        } catch {
+            return .unavailable
+        }
+    }
+
+    /// Uploads the photo stored locally as `name`, or removes it when nil.
+    static func save(name: String?, uid: String) {
+        guard let name else {
+            privateDocument(uid).delete()
+            publishPublic(nil, uid: uid)
+            return
+        }
+        guard let original = try? Data(contentsOf: ImageStore.url(for: name)),
+              let small = thumbnail(original) else { return }
+        privateDocument(uid).setData(["name": name, "data": small, "updatedAt": FieldValue.serverTimestamp()])
+        publishPublic(small, uid: uid)
+    }
+
+    /// Friends see this one. Skipped silently when the user has no public profile.
+    static func publishPublic(_ data: Data?, uid: String) {
+        Firestore.firestore().collection("profiles").document(uid)
+            .updateData(["avatar": data ?? FieldValue.delete()]) { _ in }
+    }
+}
+
+/// Explore wishlist in users/{uid}/wishlist/{pickID}. Falls back to the
+/// on-device file when nobody is signed in.
+@MainActor
+final class CloudExploreWishlist: ExploreWishlistProviding {
+    private let local = LocalExploreWishlist()
+
+    private func collection(_ uid: String) -> CollectionReference {
+        Firestore.firestore().collection("users").document(uid).collection("wishlist")
+    }
+
+    func fetchSavedPicks() async throws -> [SavedPick] {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return try await local.fetchSavedPicks() }
+        let snapshot = try await collection(uid).getDocuments()
+        var picks = snapshot.documents.compactMap { doc -> SavedPick? in
+            guard let payload = doc.data()["payload"] as? String else { return nil }
+            return try? JSONDecoder().decode(SavedPick.self, from: Data(payload.utf8))
+        }
+        // First sign-in after this update: bring this device's saves along.
+        if picks.isEmpty, !snapshot.metadata.isFromCache, AccountLocalData.belongs(to: uid, "wishlist") {
+            let saved = (try? await local.fetchSavedPicks()) ?? []
+            for pick in saved { write(pick, uid: uid) }
+            picks = saved
+        }
+        AccountLocalData.claim(uid, "wishlist")
+        return picks.sorted { $0.savedAt > $1.savedAt }
+    }
+
+    func setSaved(_ pick: ShopPick, saved: Bool) async throws {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else {
+            return try await local.setSaved(pick, saved: saved)
+        }
+        let document = collection(uid).document(pick.id)
+        if saved {
+            if try await document.getDocument().exists { return }  // keep the original savedAt
+            try await document.setData(Self.fields(SavedPick(pick: pick, savedAt: .now)))
+        } else {
+            try await document.delete()
+        }
+    }
+
+    private func write(_ pick: SavedPick, uid: String) {
+        collection(uid).document(pick.id).setData(Self.fields(pick))
+    }
+
+    private static func fields(_ pick: SavedPick) -> [String: Any] {
+        let payload = (try? JSONEncoder().encode(pick)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return ["payload": payload, "savedAt": Timestamp(date: pick.savedAt)]
+    }
+}
+
+/// Lab collages: the project (without pictures) in users/{uid}/labProjects,
+/// and each picture once, by content hash, in Supabase under {uid}/lab/.
+@MainActor
+final class LabCloudSync {
+    static let shared = LabCloudSync()
+    private var uploaded: Set<String> = []
+
+    private func collection(_ uid: String) -> CollectionReference {
+        Firestore.firestore().collection("users").document(uid).collection("labProjects")
+    }
+
+    private static func path(for data: Data, uid: String) -> (path: String, type: String) {
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let isPNG = data.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        return (uid + "/lab/" + hash + (isPNG ? ".png" : ".jpg"), isPNG ? "image/png" : "image/jpeg")
+    }
+
+    private func upload(_ data: Data, uid: String) async throws -> String {
+        let target = Self.path(for: data, uid: uid)
+        guard !uploaded.contains(target.path) else { return target.path }
+        guard data.count <= 5 * 1024 * 1024 else {
+            throw CollectionStore.CloudFailure.message("A Lab picture is larger than 5 MB")
+        }
+        _ = try await CloudStorage.client.storage.from(CloudStorage.bucket).upload(
+            target.path, data: data, options: .init(contentType: target.type, upsert: true))
+        uploaded.insert(target.path)
+        return target.path
+    }
+
+    /// Saves one project to the account. Runs in the background; a failure
+    /// leaves the local copy, and the next save or pull tries again.
+    func push(_ project: LabProject) {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
+        Task { @MainActor in try? await self.upload(project, uid: uid) }
+    }
+
+    private func upload(_ project: LabProject, uid: String) async throws {
+        var stripped = project
+        var images: [String: String] = [:]
+        if let data = project.background.imageData {
+            images["background"] = try await upload(data, uid: uid)
+            stripped.background.imageData = nil
+        }
+        if let data = project.previewData {
+            images["preview"] = try await upload(data, uid: uid)
+            stripped.previewData = nil
+        }
+        for index in stripped.elements.indices {
+            guard let data = stripped.elements[index].imageData else { continue }
+            images["element." + stripped.elements[index].id.uuidString] = try await upload(data, uid: uid)
+            stripped.elements[index].imageData = nil
+        }
+        let payload = try JSONEncoder().encode(stripped)
+        guard payload.count < 700_000 else { throw CollectionStore.CloudFailure.message("Collage is too large to sync") }
+        guard FirebaseAuth.Auth.auth().currentUser?.uid == uid else { return }
+        try await collection(uid).document(project.id.uuidString).setData([
+            "payload": String(decoding: payload, as: UTF8.self),
+            "images": images,
+            "updatedAt": Timestamp(date: project.updatedAt),
+            "deleted": false
+        ])
+    }
+
+    func delete(_ id: UUID) {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
+        collection(uid).document(id.uuidString).setData(["deleted": true, "updatedAt": Timestamp(date: .now)])
+    }
+
+    /// Merges the account's collages into this device's list. Returns true
+    /// when the local list changed.
+    func pull() async -> Bool {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return false }
+        guard let snapshot = try? await collection(uid).getDocuments(source: .server) else { return false }
+        let startedWith = LabDraftStore.load()
+        var local = AccountLocalData.belongs(to: uid, "lab") ? startedWith : []
+        var remoteIDs: Set<UUID> = []
+        for doc in snapshot.documents {
+            guard let id = UUID(uuidString: doc.documentID) else { continue }
+            remoteIDs.insert(id)
+            let data = doc.data()
+            if data["deleted"] as? Bool == true {
+                local.removeAll { $0.id == id }
+                continue
+            }
+            guard let payload = data["payload"] as? String,
+                  var project = try? JSONDecoder().decode(LabProject.self, from: Data(payload.utf8)) else { continue }
+            if let existing = local.first(where: { $0.id == id }), existing.updatedAt >= project.updatedAt {
+                if existing.updatedAt > project.updatedAt { push(existing) }
+                continue
+            }
+            let images = data["images"] as? [String: String] ?? [:]
+            func download(_ key: String) async -> Data? {
+                guard let path = images[key] else { return nil }
+                return try? await CloudStorage.client.storage.from(CloudStorage.bucket).download(path: path)
+            }
+            project.background.imageData = await download("background")
+            project.previewData = await download("preview")
+            for index in project.elements.indices {
+                project.elements[index].imageData = await download("element." + project.elements[index].id.uuidString)
+            }
+            guard FirebaseAuth.Auth.auth().currentUser?.uid == uid else { return false }
+            local.removeAll { $0.id == id }
+            local.append(project)
+        }
+        // Collages made on this device before syncing existed.
+        for project in local where !remoteIDs.contains(project.id) { push(project) }
+        AccountLocalData.claim(uid, "lab")
+        guard local != startedWith else { return false }
+        LabDraftStore.replaceLocal(with: local)
+        return true
+    }
+}

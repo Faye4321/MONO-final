@@ -64,6 +64,9 @@ struct LabRootView: View {
             }
         }
         .background(BrandColor.archiveIvory.ignoresSafeArea())
+        // Making a collage uses the whole screen (bottom buttons, editor
+        // tools); the tab bar comes back on the Lab home page.
+        .preference(key: MonoTabBarHiddenKey.self, value: step != .home)
     }
 }
 
@@ -146,7 +149,10 @@ private struct LabHomeView: View {
             .padding(.top, 18)
             .padding(.bottom, 120)
         }
-        .task { drafts = LabDraftStore.load() }
+        .task {
+            drafts = LabDraftStore.load()
+            if await LabCloudSync.shared.pull() { drafts = LabDraftStore.load() }
+        }
     }
 }
 

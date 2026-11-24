@@ -24,7 +24,10 @@ service cloud.firestore {
       allow list: if signedIn() && request.query.limit <= 20;
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['name', 'handle', 'bio', 'location',
-             'objectCount', 'collectionCount', 'publicCollections', 'updatedAt'])
+             'objectCount', 'collectionCount', 'publicCollections', 'updatedAt', 'avatar'])
+        // Optional small profile photo (JPEG bytes), shown to other collectors.
+        && (!('avatar' in request.resource.data)
+            || (request.resource.data.avatar is bytes && request.resource.data.avatar.size() <= 200000))
         && validHandle(request.resource.data.handle)
         && request.resource.data.name is string && request.resource.data.name.size() <= 80
         && request.resource.data.bio is string && request.resource.data.bio.size() <= 2000

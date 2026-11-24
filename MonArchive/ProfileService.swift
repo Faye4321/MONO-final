@@ -256,21 +256,55 @@ struct CloudBackedProfileService: ProfileServicing {
     func loadProfile() async throws -> UserProfile {
         cloud.activateCurrentUserIfNeeded()
         let remote = cloud.profile
-        let stored = try? await local.loadProfile()
+        var stored = (try? await local.loadProfile()) ?? UserProfile()
+        if let uid = SocialDirectory.currentUID {
+            let avatar = await syncedAvatarName(uid: uid, local: stored.avatarFileName)
+            if avatar != stored.avatarFileName {
+                stored.avatarFileName = avatar
+                try? await local.saveProfile(stored)
+            }
+        }
         return UserProfile(
             name: remote.name,
             handle: HandleRules.normalized(remote.handle),
             location: remote.location,
             bio: remote.bio,
-            avatarFileName: stored?.avatarFileName
+            avatarFileName: stored.avatarFileName
         )
+    }
+
+    /// The account's photo wins; a photo set on this device before syncing
+    /// existed is uploaded; another account's local photo is ignored.
+    private func syncedAvatarName(uid: String, local name: String?) async -> String? {
+        let localFileExists = name.map { FileManager.default.fileExists(atPath: ImageStore.url(for: $0).path) } ?? false
+        switch await AvatarCloud.fetch(uid: uid) {
+        case .found(let remoteName, let data):
+            AccountLocalData.claim(uid, "avatar")
+            if remoteName == name, localFileExists { return name }
+            let file = ImageStore.url(for: remoteName)
+            if !FileManager.default.fileExists(atPath: file.path) { try? data.write(to: file, options: .atomic) }
+            return remoteName
+        case .none:
+            let mine = AccountLocalData.belongs(to: uid, "avatar")
+            AccountLocalData.claim(uid, "avatar")
+            guard mine, localFileExists else { return nil }
+            AvatarCloud.save(name: name, uid: uid)
+            return name
+        case .unavailable:
+            return AccountLocalData.belongs(to: uid, "avatar") ? name : nil
+        }
     }
 
     func saveProfile(_ profile: UserProfile) async throws {
         // Photo first: it is local, so it should not be lost if cloud sync fails.
         var stored = (try? await local.loadProfile()) ?? UserProfile()
+        let avatarChanged = stored.avatarFileName != profile.avatarFileName
         stored.avatarFileName = profile.avatarFileName
         try await local.saveProfile(stored)
+        if let uid = SocialDirectory.currentUID {
+            AccountLocalData.claim(uid, "avatar")
+            if avatarChanged { AvatarCloud.save(name: profile.avatarFileName, uid: uid) }
+        }
 
         // Claim the handle and update the public profile friends search.
         // Only a taken handle stops the save; if the directory isn't set up
@@ -281,6 +315,11 @@ struct CloudBackedProfileService: ProfileServicing {
             throw ProfileServiceError.handleTaken
         } catch {
             print("Directory publish skipped: \(error.localizedDescription)")
+        }
+        // A new public profile starts without the photo; add it.
+        if let uid = SocialDirectory.currentUID, !avatarChanged, let name = profile.avatarFileName,
+           let data = try? Data(contentsOf: ImageStore.url(for: name)) {
+            AvatarCloud.publishPublic(AvatarCloud.thumbnail(data), uid: uid)
         }
 
         cloud.activateCurrentUserIfNeeded()
@@ -508,6 +547,12 @@ final class ProfileStore: ObservableObject {
             visibilityByID[id] = previous
             throw error
         }
+    }
+
+    /// Settings that arrived from the account (AccountPreferencesSync).
+    func applySyncedVisibility(_ visibility: [String: CollectionVisibility], defaultVisibility: CollectionVisibility) {
+        if visibilityByID != visibility { visibilityByID = visibility }
+        if self.defaultVisibility != defaultVisibility { self.defaultVisibility = defaultVisibility }
     }
 
     func visibility(for category: CollectionCategory) -> CollectionVisibility {

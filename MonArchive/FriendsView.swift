@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FriendsView: View {
     @EnvironmentObject private var socialStore: SocialStore
@@ -630,13 +631,19 @@ struct SocialAvatarView: View {
                 endPoint: .bottomTrailing
             )
 
-            Text(user.initials)
-                .font(
-                    ArchiveTheme.heading(
-                        max(12, size * 0.29)
+            if let data = user.avatarData, let photo = UIImage(data: data) {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(user.initials)
+                    .font(
+                        ArchiveTheme.heading(
+                            max(12, size * 0.29)
+                        )
                     )
-                )
-                .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.white)
+            }
         }
         .frame(width: size, height: size)
         .clipShape(

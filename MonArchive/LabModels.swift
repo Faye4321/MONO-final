@@ -316,16 +316,30 @@ enum LabDraftStore {
         return projects.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Saves on this device and to the signed-in account.
+    @MainActor
     static func save(_ project: LabProject) {
         var projects = load().filter { $0.id != project.id }
         projects.insert(project, at: 0)
+        let dropped = projects.dropFirst(12)
         projects = Array(projects.prefix(12))
-        guard let data = try? JSONEncoder().encode(projects) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        write(projects)
+        LabCloudSync.shared.push(project)
+        dropped.forEach { LabCloudSync.shared.delete($0.id) }
     }
 
+    @MainActor
     static func delete(_ id: UUID) {
-        let projects = load().filter { $0.id != id }
+        write(load().filter { $0.id != id })
+        LabCloudSync.shared.delete(id)
+    }
+
+    /// Used by the cloud pull; doesn't upload anything.
+    static func replaceLocal(with projects: [LabProject]) {
+        write(Array(projects.sorted { $0.updatedAt > $1.updatedAt }.prefix(12)))
+    }
+
+    private static func write(_ projects: [LabProject]) {
         guard let data = try? JSONEncoder().encode(projects) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }

@@ -19,7 +19,7 @@ struct HomeView: View {
     ) {
         self.onProfileTapped = onProfileTapped
         self.onOpenLab = onOpenLab
-        _explore = StateObject(wrappedValue: ExploreStore(catalog: catalogProvider, wishlist: wishlistProvider))
+        _explore = StateObject(wrappedValue: ExploreStore(catalog: catalogProvider, wishlist: wishlistProvider ?? CloudExploreWishlist()))
     }
 
     private var preferred: [CollectionCategory] { CollectingPreferences.categories(from: collectsRaw) }
