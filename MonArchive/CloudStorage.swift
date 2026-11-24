@@ -758,3 +758,140 @@ final class LabCloudSync {
         return true
     }
 }
+
+/// Public collections, readable by any signed-in collector:
+/// profiles/{uid}/collections/{collectionID} { name, layout, count }
+/// profiles/{uid}/collections/{collectionID}/items/{itemID} { payload, preview }
+/// Only what changed is written; what's no longer public is deleted.
+@MainActor
+final class PublicCollectionPublisher {
+    static let shared = PublicCollectionPublisher()
+
+    private struct Published: Codable {
+        var collections: [String: [String: String]] = [:]   // collectionID → itemID → signature
+        var headers: [String: String] = [:]                  // collectionID → name|layout|count
+    }
+
+    private var running = false
+    private var rerun = false
+    private var latest: (uid: String, collections: [(PersonalCollection, [CollectibleItem])])?
+
+    private func stateKey(_ uid: String) -> String { "mono.publicCollections." + uid }
+
+    private func load(_ uid: String) -> Published {
+        UserDefaults.standard.data(forKey: stateKey(uid))
+            .flatMap { try? JSONDecoder().decode(Published.self, from: $0) } ?? Published()
+    }
+
+    private func save(_ state: Published, uid: String) {
+        UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: stateKey(uid))
+    }
+
+    /// Call whenever objects, collections or visibility may have changed.
+    func update(store: CollectionStore, profile: ProfileStore) {
+        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid, store.accountUID == uid,
+              store.cloudReady, store.catalogReady else { return }
+        let collections = store.visibleCollections()
+            .filter { profile.visibility(forCollection: $0) == .isPublic }
+            .map { ($0, store.items(in: $0.id)) }
+        latest = (uid, collections)
+        guard !running else { rerun = true; return }
+        running = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 800_000_000)  // let quick edits settle
+            repeat {
+                rerun = false
+                if let latest { await self.publish(latest.collections, uid: latest.uid) }
+            } while rerun
+            running = false
+        }
+    }
+
+    private static func payload(_ item: CollectibleItem) -> String? {
+        var copy = item
+        copy.imageData = nil
+        copy.imageFileName = nil
+        return (try? JSONEncoder().encode(copy)).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    static func preview(for item: CollectibleItem) -> Data? {
+        guard let source = item.uploadedImage ?? item.imageName.flatMap({ UIImage(named: $0) }) else { return nil }
+        let scale = min(1, 600 / max(source.size.width, source.size.height))
+        let size = CGSize(width: max(1, source.size.width * scale), height: max(1, source.size.height * scale))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            source.draw(in: CGRect(origin: .zero, size: size))
+        }
+        for quality in [0.6, 0.35, 0.15] {
+            if let data = resized.jpegData(compressionQuality: quality), data.count <= 180_000 { return data }
+        }
+        return nil
+    }
+
+    private func publish(_ collections: [(PersonalCollection, [CollectibleItem])], uid: String) async {
+        var state = load(uid)
+        let root = Firestore.firestore().collection("profiles").document(uid).collection("collections")
+        let wanted = Set(collections.map { $0.0.id.uuidString })
+        do {
+            for (collection, items) in collections {
+                let cid = collection.id.uuidString
+                let header = "\(collection.name)|\(collection.layout.rawValue)|\(items.count)"
+                if state.headers[cid] != header {
+                    try await root.document(cid).setData([
+                        "name": collection.name, "layout": collection.layout.rawValue,
+                        "count": items.count, "updatedAt": FieldValue.serverTimestamp()
+                    ])
+                    state.headers[cid] = header
+                    save(state, uid: uid)
+                }
+                var published = state.collections[cid] ?? [:]
+                for item in items {
+                    guard let payload = Self.payload(item) else { continue }
+                    let signature = SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
+                        + "|" + (item.imageFileName ?? item.imageName ?? "")
+                    let iid = item.id.uuidString
+                    guard published[iid] != signature else { continue }
+                    var fields: [String: Any] = ["payload": payload, "updatedAt": FieldValue.serverTimestamp()]
+                    if let preview = Self.preview(for: item) { fields["preview"] = preview }
+                    try await root.document(cid).collection("items").document(iid).setData(fields)
+                    published[iid] = signature
+                    state.collections[cid] = published
+                    save(state, uid: uid)
+                }
+                let current = Set(items.map(\.id.uuidString))
+                for iid in published.keys where !current.contains(iid) {
+                    try await root.document(cid).collection("items").document(iid).delete()
+                    published.removeValue(forKey: iid)
+                    state.collections[cid] = published
+                    save(state, uid: uid)
+                }
+            }
+            // No longer public (or deleted): remove it for everyone else.
+            for cid in Set(state.headers.keys).union(state.collections.keys) where !wanted.contains(cid) {
+                for iid in (state.collections[cid] ?? [:]).keys {
+                    try await root.document(cid).collection("items").document(iid).delete()
+                }
+                try await root.document(cid).delete()
+                state.collections.removeValue(forKey: cid)
+                state.headers.removeValue(forKey: cid)
+                save(state, uid: uid)
+            }
+        } catch {
+            // Offline or rules not published yet: the next change tries again.
+        }
+    }
+
+    /// A public collection someone else published.
+    static func items(ownerUID: String, collectionID: String) async throws -> [CollectibleItem] {
+        let snapshot = try await Firestore.firestore().collection("profiles").document(ownerUID)
+            .collection("collections").document(collectionID).collection("items").getDocuments()
+        return snapshot.documents.compactMap { doc -> CollectibleItem? in
+            guard let payload = doc.data()["payload"] as? String,
+                  var item = try? JSONDecoder().decode(CollectibleItem.self, from: Data(payload.utf8)) else { return nil }
+            item.imageData = doc.data()["preview"] as? Data
+            return item
+        }
+        .sorted { ($0.addedOn ?? .distantPast) > ($1.addedOn ?? .distantPast) }
+    }
+}

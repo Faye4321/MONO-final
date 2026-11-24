@@ -160,12 +160,12 @@ final class SocialStore: ObservableObject {
             }
     }
 
-    private func createCloudCollection(name: String, itemIDs: [UUID], permission: SharedPermission) -> SharedCollection {
+    private func createCloudCollection(name: String, memberIDs: [UUID], itemIDs: [UUID], permission: SharedPermission) -> SharedCollection {
         let collection = SharedCollection(name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Shared collection" : name,
             ownerID: currentUserID, memberIDs: [currentUserID], itemIDs: [], permission: permission)
         guard let uid = cloudUID else { cloudError = "Please sign in first."; return collection }
         let token = UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        let label = Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector"
+        let label = Self.myDisplayName
         let data: [String: Any] = ["name": collection.name, "ownerUID": uid, "memberUIDs": [uid],
             "memberNames": [uid: label], "itemIDs": [String](), "permission": permission.rawValue,
             "inviteToken": token, "createdAt": FieldValue.serverTimestamp(), "updatedAt": FieldValue.serverTimestamp()]
@@ -181,12 +181,54 @@ final class SocialStore: ObservableObject {
                 guard self.cloudUID == uid else { return }
                 self.metadata[collection.id] = data
                 for itemID in itemIDs { await self.publishSharedItem(itemID, collectionID: collection.id) }
+                // Friends picked on the create screen are added straight away.
+                for friendID in memberIDs where friendID != self.currentUserID {
+                    do { try await self.addMember(friendID, to: collection.id) }
+                    catch { if self.cloudUID == uid { self.cloudError = error.localizedDescription } }
+                }
             } catch { if self.cloudUID == uid { self.cloudError = error.localizedDescription } }
         }
         return collection
     }
 
     // MARK: Membership changes (API shared by the backend and UI work)
+
+    /// The name other members see for the signed-in user.
+    static var myDisplayName: String {
+        let name = ProfileStore.shared.profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        return Auth.auth().currentUser?.email?.components(separatedBy: "@").first ?? "Collector"
+    }
+
+    /// Owner only: adds a friend to the collection directly (no link needed).
+    func addMember(_ userID: UUID, to collectionID: UUID) async throws {
+        guard let uid = cloudUID else { throw CollectionStore.CloudFailure.message("Sign in first.") }
+        guard let data = metadata[collectionID] else { throw CollectionStore.CloudFailure.message("This collection isn't available right now.") }
+        guard data["ownerUID"] as? String == uid else {
+            throw CollectionStore.CloudFailure.message("Only the person who created this collection can add members.")
+        }
+        guard isFriend(userID), let target = uidBySocialID[userID] else {
+            throw CollectionStore.CloudFailure.message("You can add friends only. Send them the invitation link instead.")
+        }
+        let memberUIDs = data["memberUIDs"] as? [String] ?? []
+        guard !memberUIDs.contains(target) else { return }
+        guard memberUIDs.count < 50 else { throw CollectionStore.CloudFailure.message("This collection already has 50 members.") }
+        let name = user(withID: userID)?.name ?? "Collector"
+        try await Firestore.firestore().collection("sharedCollections").document(collectionID.uuidString).updateData([
+            "memberUIDs": FieldValue.arrayUnion([target]),
+            "memberNames." + target: name,
+            "addedUID": target,
+            "updatedAt": FieldValue.serverTimestamp()
+        ])
+        guard cloudUID == uid else { return }
+        var updated = data
+        updated["memberUIDs"] = memberUIDs + [target]
+        metadata[collectionID] = updated
+        if let index = sharedCollections.firstIndex(where: { $0.id == collectionID }),
+           !sharedCollections[index].memberIDs.contains(userID) {
+            sharedCollections[index].memberIDs.append(userID)
+        }
+    }
 
     /// Whether the signed-in user created this shared collection.
     func isOwner(of collection: SharedCollection) -> Bool {
@@ -504,6 +546,19 @@ final class SocialStore: ObservableObject {
         return register(profile)
     }
 
+    /// The Firebase uid behind a collector, once they've been looked up.
+    func uid(for userID: UUID) -> String? { uidBySocialID[userID] }
+
+    /// Fetches a collector's public profile again, so newly public
+    /// collections and counts show up without restarting the app.
+    func refreshDirectoryProfile(for userID: UUID) async {
+        guard cloudStarted, let uid = uidBySocialID[userID],
+              let profile = try? await SocialDirectory.profile(uid: uid) else { return }
+        objectWillChange.send()
+        let user = register(profile)
+        if let index = friends.firstIndex(where: { $0.id == user.id }) { friends[index] = user }
+    }
+
     func directoryProfile(for userID: UUID) -> DirectoryProfile? {
         uidBySocialID[userID].flatMap { directoryCache[$0] }
     }
@@ -546,7 +601,7 @@ final class SocialStore: ObservableObject {
     func publishStats(objectCount: Int, collectionCount: Int,
                       publicCollections: [DirectoryProfile.PublicCollection]) {
         guard cloudStarted, cloudUID != nil else { return }
-        let key = "\(objectCount)|\(collectionCount)|\(publicCollections.map { "\($0.name):\($0.count)" })"
+        let key = "\(objectCount)|\(collectionCount)|\(publicCollections.map { "\($0.id ?? ""):\($0.name):\($0.count)" })"
         guard key != lastPublishedStats else { return }
         lastPublishedStats = key
         Task { @MainActor in
@@ -637,7 +692,7 @@ final class SocialStore: ObservableObject {
         permission: SharedPermission
     ) -> SharedCollection {
         if cloudStarted {
-            return createCloudCollection(name: name, itemIDs: itemIDs, permission: permission)
+            return createCloudCollection(name: name, memberIDs: memberIDs, itemIDs: itemIDs, permission: permission)
         }
         let trimmedName = name.trimmingCharacters(
             in: .whitespacesAndNewlines

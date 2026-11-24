@@ -46,10 +46,11 @@ struct CreateSharedCollectionView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     nameSection
-                    Text("Create your collection, then use Share Invitation to invite friends. They join using their own account.")
+                    Text("You'll be the owner. Friends you pick are added right away; use Share Invitation for anyone else.")
                         .font(ArchiveTheme.body(13))
                         .foregroundStyle(ArchiveTheme.catalogGray)
                         .padding(.vertical, 20)
+                    if !socialStore.friends.isEmpty { friendsSection }
                     permissionSection
                     objectsSection
                 }

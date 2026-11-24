@@ -50,6 +50,16 @@ struct RootTabView: View {
             }
         }
         .onPreferenceChange(MonoTabBarHiddenKey.self) { hiddenByPage = $0 }
+        // Keeps public collections (what other collectors can open) current.
+        .onChange(of: store.items) { _, _ in
+            PublicCollectionPublisher.shared.update(store: store, profile: .shared)
+        }
+        .onChange(of: store.collections) { _, _ in
+            PublicCollectionPublisher.shared.update(store: store, profile: .shared)
+        }
+        .onChange(of: store.catalogReady) { _, _ in
+            PublicCollectionPublisher.shared.update(store: store, profile: .shared)
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardVisible = true
         }

@@ -51,6 +51,8 @@ struct FriendProfileView: View {
             .scrollIndicators(.hidden)
         }
         .navigationBarTitleDisplayMode(.inline)
+        // Always show their latest public collections and counts.
+        .task { await socialStore.refreshDirectoryProfile(for: user.id) }
         .toolbarBackground(
             ArchiveTheme.ivory,
             for: .navigationBar
@@ -300,11 +302,20 @@ struct FriendProfileView: View {
             } else {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                     ForEach(publicCollections, id: \.self) { collection in
-                        FriendPublicCollectionCard(
+                        let card = FriendPublicCollectionCard(
                             category: CollectionCategory(rawValue: collection.layout) ?? .poster,
                             title: collection.name,
                             objectCount: collection.count
                         )
+                        if let id = collection.id, !id.isEmpty, let owner = socialStore.uid(for: user.id) {
+                            NavigationLink {
+                                FriendPublicCollectionView(ownerUID: owner, collectionID: id,
+                                                           ownerName: user.name, title: collection.name)
+                            } label: { card }
+                            .buttonStyle(.plain)
+                        } else {
+                            card
+                        }
                     }
                 }
             }
@@ -576,5 +587,76 @@ private struct SharedCollectionPlaceholder: View {
             user: socialStore.friends[0]
         )
         .environmentObject(socialStore)
+    }
+}
+
+
+// MARK: - A collector's public collection
+
+/// The objects in someone else's public collection (read-only).
+struct FriendPublicCollectionView: View {
+    let ownerUID: String
+    let collectionID: String
+    let ownerName: String
+    let title: String
+
+    @State private var items: [CollectibleItem] = []
+    @State private var loading = true
+    @State private var loadError: String?
+
+    var body: some View {
+        ZStack {
+            ArchiveTheme.ivory.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(ownerName.uppercased() + " · PUBLIC")
+                            .font(ArchiveTheme.label(10))
+                            .tracking(0.8)
+                            .foregroundStyle(ArchiveTheme.collectedRed)
+                        Text(title)
+                            .font(ArchiveTheme.heading(28))
+                            .foregroundStyle(ArchiveTheme.ink)
+                        Text(items.count == 1 ? "1 OBJECT" : "\(items.count) OBJECTS")
+                            .font(ArchiveTheme.label(10))
+                            .foregroundStyle(ArchiveTheme.catalogGray)
+                    }
+                    .padding(.top, 8)
+
+                    if loading {
+                        ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+                    } else if let loadError {
+                        Text(loadError)
+                            .font(ArchiveTheme.body(13))
+                            .foregroundStyle(ArchiveTheme.collectedRed)
+                    } else if items.isEmpty {
+                        Text("Nothing here yet.")
+                            .font(ArchiveTheme.body(13))
+                            .foregroundStyle(ArchiveTheme.catalogGray)
+                    } else {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                                  alignment: .leading, spacing: 18) {
+                            ForEach(items) { item in SharedObjectCard(item: item) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, MonoTabBar.contentBottomInset)
+            }
+            .scrollIndicators(.hidden)
+            .refreshable { await load() }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            items = try await PublicCollectionPublisher.items(ownerUID: ownerUID, collectionID: collectionID)
+            loadError = nil
+        } catch {
+            loadError = "Couldn't open this collection. It may have been made private."
+        }
+        loading = false
     }
 }

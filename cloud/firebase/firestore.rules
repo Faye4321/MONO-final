@@ -14,6 +14,8 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
     // ---- Friends and collector directory (Gladys) ----
+    // friendships/{a_b} uses the two uids sorted.
+    function pairID(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
     function validHandle(h) {
       return h is string && h.matches('^[a-z0-9._]{3,20}$') && !h.matches('^[.].*|.*[.]$');
     }
@@ -34,6 +36,24 @@ service cloud.firestore {
         // The handle in the profile must belong to this user (checked after the batch).
         && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.handle)).data.uid == request.auth.uid;
       allow delete: if signedIn() && request.auth.uid == uid;
+    }
+    // Public collections: what other collectors can open from a profile.
+    // Anyone signed in can read; only the owner writes. Previews stay small.
+    match /profiles/{uid}/collections/{cid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'layout', 'count', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80;
+      allow delete: if signedIn() && request.auth.uid == uid;
+      match /items/{itemID} {
+        allow read: if signedIn();
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['payload', 'preview', 'updatedAt'])
+          && request.resource.data.payload is string && request.resource.data.payload.size() <= 700000
+          && (!('preview' in request.resource.data)
+              || (request.resource.data.preview is bytes && request.resource.data.preview.size() <= 200000));
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
     }
     // One owner per handle. Changing handle = create the new one, delete the old one.
     match /handles/{handle} {
@@ -117,6 +137,18 @@ service cloud.firestore {
           && request.resource.data.inviteToken is string && request.resource.data.inviteToken.size() == 64
           && request.resource.data.inviteToken != resource.data.inviteToken
           && !('joinProof' in request.resource.data))
+        ||
+        // The owner adds one friend at a time (an accepted friendship is required).
+        (resource.data.ownerUID == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUIDs', 'memberNames', 'addedUID', 'updatedAt'])
+          && request.resource.data.addedUID is string
+          && request.resource.data.addedUID != request.auth.uid
+          && !(request.resource.data.addedUID in resource.data.memberUIDs)
+          && request.resource.data.memberUIDs.toSet() == resource.data.memberUIDs.toSet().union([request.resource.data.addedUID].toSet())
+          && request.resource.data.memberUIDs.size() <= 50
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.resource.data.addedUID])
+          && request.resource.data.memberNames[request.resource.data.addedUID] is string
+          && get(/databases/$(database)/documents/friendships/$(pairID(request.auth.uid, request.resource.data.addedUID))).data.status == 'accepted')
         ||
         // The owner removes other members (never themself); their names go with them.
         (resource.data.ownerUID == request.auth.uid

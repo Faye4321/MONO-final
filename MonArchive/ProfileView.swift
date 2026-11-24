@@ -40,9 +40,11 @@ struct ProfileView: View {
             objectCount: store.activeItems.count,
             collectionCount: myCollections.count,
             publicCollections: publicCollections.map {
-                .init(name: $0.name, count: store.items(in: $0.id).count, layout: $0.layout.rawValue)
+                .init(name: $0.name, count: store.items(in: $0.id).count, layout: $0.layout.rawValue,
+                      id: $0.id.uuidString)
             }
         )
+        PublicCollectionPublisher.shared.update(store: store, profile: profileStore)
     }
 
     private var hasHandle: Bool { !profileStore.profile.handle.isEmpty }

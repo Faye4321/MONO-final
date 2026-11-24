@@ -21,6 +21,8 @@ struct DirectoryProfile: Equatable, Identifiable {
         var name: String
         var count: Int
         var layout: String
+        /// Opens profiles/{uid}/collections/{id}; missing on older profiles.
+        var id: String? = nil
     }
 
     var uid: String
@@ -56,7 +58,7 @@ struct DirectoryProfile: Equatable, Identifiable {
         publicCollections = (data["publicCollections"] as? [[String: Any]] ?? []).compactMap { entry in
             guard let name = entry["name"] as? String else { return nil }
             return PublicCollection(name: name, count: entry["count"] as? Int ?? 0,
-                                    layout: entry["layout"] as? String ?? "")
+                                    layout: entry["layout"] as? String ?? "", id: entry["id"] as? String)
         }
     }
 
@@ -65,7 +67,7 @@ struct DirectoryProfile: Equatable, Identifiable {
             "name": name, "handle": handle, "bio": bio, "location": location,
             "objectCount": objectCount, "collectionCount": collectionCount,
             "publicCollections": publicCollections.map {
-                ["name": $0.name, "count": $0.count, "layout": $0.layout] as [String: Any]
+                ["name": $0.name, "count": $0.count, "layout": $0.layout, "id": $0.id ?? ""] as [String: Any]
             },
             "updatedAt": FieldValue.serverTimestamp()
         ]
@@ -163,7 +165,7 @@ enum SocialDirectory {
         try await db.collection("profiles").document(uid).updateData([
             "objectCount": objectCount, "collectionCount": collectionCount,
             "publicCollections": publicCollections.map {
-                ["name": $0.name, "count": $0.count, "layout": $0.layout] as [String: Any]
+                ["name": $0.name, "count": $0.count, "layout": $0.layout, "id": $0.id ?? ""] as [String: Any]
             },
             "updatedAt": FieldValue.serverTimestamp()
         ])

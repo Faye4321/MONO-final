@@ -17,6 +17,8 @@ struct SharedCollectionDetailView: View {
     @State private var confirmingLeave = false
     @State private var isLeaving = false
     @State private var membershipError: String?
+    /// Owner only: the add-members sheet.
+    @State private var showingAddMembers = false
 
     private var sharedCollection: SharedCollection? {
         socialStore.sharedCollections.first {
@@ -111,6 +113,10 @@ struct SharedCollectionDetailView: View {
                     .disabled(isLeaving)
                 }
             }
+        }
+        .sheet(isPresented: $showingAddMembers) {
+            AddSharedMembersSheet(collectionID: collectionID)
+                .environmentObject(socialStore)
         }
         .confirmationDialog(
             "Remove \(memberPendingRemoval?.name ?? "this member")?",
@@ -214,7 +220,7 @@ struct SharedCollectionDetailView: View {
             )
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
                     VStack(spacing: 7) {
                         ZStack {
                             Circle()
@@ -229,12 +235,36 @@ struct SharedCollectionDetailView: View {
                         Text("YOU")
                             .font(ArchiveTheme.label(10))
                             .foregroundStyle(ArchiveTheme.catalogGray)
+                        if socialStore.isOwner(of: collection) { ownerBadge }
                     }
 
+                    // The creator is the owner and is listed first.
                     ForEach(
                         socialStore.members(of: collection)
+                            .sorted { ($0.id == collection.ownerID ? 0 : 1) < ($1.id == collection.ownerID ? 0 : 1) }
                     ) { member in
                         memberAvatar(member, in: collection)
+                    }
+
+                    if socialStore.isOwner(of: collection) {
+                        Button {
+                            membershipError = nil
+                            showingAddMembers = true
+                        } label: {
+                            VStack(spacing: 7) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundStyle(ArchiveTheme.ink)
+                                    .frame(width: 54, height: 54)
+                                    .background(Circle().stroke(ArchiveTheme.ink.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                                Text("ADD")
+                                    .font(ArchiveTheme.label(10))
+                                    .foregroundStyle(ArchiveTheme.catalogGray)
+                            }
+                            .frame(width: 70)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add members")
                     }
                 }
             }
@@ -246,6 +276,13 @@ struct SharedCollectionDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private var ownerBadge: some View {
+        Text("OWNER")
+            .font(ArchiveTheme.label(8))
+            .tracking(0.6)
+            .foregroundStyle(ArchiveTheme.collectedRed)
     }
 
     @ViewBuilder
@@ -270,6 +307,7 @@ struct SharedCollectionDetailView: View {
                 .font(ArchiveTheme.label(10))
                 .foregroundStyle(ArchiveTheme.catalogGray)
                 .lineLimit(1)
+            if member.id == collection.ownerID { ownerBadge }
         }
         .frame(width: 70)
 
@@ -451,7 +489,7 @@ struct SharedCollectionDetailView: View {
     }
 }
 
-private struct SharedObjectCard: View {
+struct SharedObjectCard: View {
     let item: CollectibleItem
 
     var body: some View {
@@ -704,6 +742,98 @@ private struct SharedCollectionDetailPreview: View {
             SharedCollectionDetailView(
                 collectionID: collection.id
             )
+        }
+    }
+}
+
+
+/// Owner only: pick friends to add to a shared collection.
+private struct AddSharedMembersSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var socialStore: SocialStore
+    let collectionID: UUID
+
+    @State private var adding: UUID?
+    @State private var errorMessage: String?
+
+    private var collection: SharedCollection? {
+        socialStore.sharedCollections.first { $0.id == collectionID }
+    }
+
+    private var candidates: [SocialUser] {
+        let members = Set(collection?.memberIDs ?? [])
+        return socialStore.friends.filter { !members.contains($0.id) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Friends you add can see this collection right away.")
+                        .font(ArchiveTheme.body(13))
+                        .foregroundStyle(ArchiveTheme.catalogGray)
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                            .font(ArchiveTheme.body(12))
+                            .foregroundStyle(ArchiveTheme.collectedRed)
+                    }
+                    if candidates.isEmpty {
+                        Text(socialStore.friends.isEmpty
+                             ? "Add friends first, or send them the invitation link."
+                             : "All your friends are already in this collection.")
+                            .font(ArchiveTheme.body(13))
+                            .foregroundStyle(ArchiveTheme.catalogGray)
+                            .padding(.top, 12)
+                    }
+                    ForEach(candidates) { friend in
+                        HStack(spacing: 12) {
+                            SocialAvatarView(user: friend, size: 44)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(friend.name).font(ArchiveTheme.heading(15)).foregroundStyle(ArchiveTheme.ink)
+                                Text(friend.handle).font(ArchiveTheme.body(12)).foregroundStyle(ArchiveTheme.catalogGray)
+                            }
+                            Spacer()
+                            Button {
+                                add(friend)
+                            } label: {
+                                if adding == friend.id {
+                                    ProgressView()
+                                } else {
+                                    Text("ADD")
+                                        .font(ArchiveTheme.label(11))
+                                        .foregroundStyle(ArchiveTheme.ivory)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 9)
+                                        .background(ArchiveTheme.ink, in: Capsule())
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(adding != nil)
+                        }
+                        .padding(12)
+                        .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+                .padding(18)
+            }
+            .background(ArchiveTheme.ivory.ignoresSafeArea())
+            .navigationTitle("Add Members")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(ArchiveTheme.ivory)
+    }
+
+    private func add(_ friend: SocialUser) {
+        adding = friend.id
+        errorMessage = nil
+        Task { @MainActor in
+            do { try await socialStore.addMember(friend.id, to: collectionID) }
+            catch { errorMessage = "Couldn't add \(friend.name). \(error.localizedDescription)" }
+            adding = nil
         }
     }
 }
