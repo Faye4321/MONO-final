@@ -45,7 +45,7 @@ struct HomeView: View {
                         }
                     }
                     .padding(.horizontal, proxy.size.width < 375 ? 14 : 18)
-                    .padding(.top, 12).padding(.bottom, 28)
+                    .padding(.top, 12).padding(.bottom, MonoTabBar.contentBottomInset)
                     .frame(maxWidth: 540).frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)

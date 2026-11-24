@@ -164,6 +164,9 @@ struct MonoTabBar: View {
     /// system iOS 26 tab bar sits.
     static let bottomOffset: CGFloat = 12
     static let innerPadding: CGFloat = 4
+    /// Bottom padding for a tab's scrolling content, so its last row can
+    /// scroll clear of the floating bar.
+    static let contentBottomInset: CGFloat = height + 28
 
     let selection: AppTab
     var onSelect: (AppTab) -> Void = { _ in }

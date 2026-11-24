@@ -77,7 +77,7 @@ struct CollectionView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 18)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, MonoTabBar.contentBottomInset)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)

@@ -71,7 +71,7 @@ struct ProfileView: View {
                         CloudAccountPanel()
                     }
                     .padding(.horizontal, 18)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, MonoTabBar.contentBottomInset)
                     // Keeps the layout readable on iPad and large phones.
                     .frame(maxWidth: 560)
                     .frame(maxWidth: .infinity)
