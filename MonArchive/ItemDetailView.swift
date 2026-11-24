@@ -367,7 +367,7 @@ struct ItemEditSheet: View {
 
                         Picker("Collection", selection: $destinationCollectionID) {
                             Text("Unfiled").tag(nil as UUID?)
-                            ForEach(store.activeCollections) { collection in
+                            ForEach(store.visibleCollections(including: destinationCollectionID)) { collection in
                                 Text(collection.name).tag(Optional(collection.id))
                             }
                             if let id = destinationCollectionID, !store.activeCollections.contains(where: { $0.id == id }) {

@@ -488,6 +488,17 @@ final class CollectionStore: ObservableObject {
     }
 
     var activeCollections: [PersonalCollection] { collections.filter { $0.deletedAt == nil } }
+
+    /// What the user sees: their own collections, plus a built-in category
+    /// shelf (Vinyl, BJD, Poster, Photocard) only once it holds something or
+    /// they renamed it, so a new account starts with no pre-made collections.
+    /// `including` keeps a picker's current choice listed.
+    func visibleCollections(including extra: UUID? = nil) -> [PersonalCollection] {
+        activeCollections.filter { collection in
+            guard collection.id == PersonalCollection.defaultID(for: collection.layout) else { return true }
+            return collection.id == extra || collection.name != collection.layout.title || !items(in: collection.id).isEmpty
+        }
+    }
     var deletedCollections: [PersonalCollection] { collections.filter { $0.deletedAt != nil } }
 
     func personalCollection(id: UUID) -> PersonalCollection? { collections.first { $0.id == id } }

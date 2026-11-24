@@ -125,7 +125,7 @@ struct CreateFlowView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("Save to collection", selection: $selectedCollectionID) {
                         Text("Unfiled").tag(nil as UUID?)
-                        ForEach(store.activeCollections) { collection in
+                        ForEach(store.visibleCollections(including: selectedCollectionID)) { collection in
                             Text(collection.name).tag(Optional(collection.id))
                         }
                     }

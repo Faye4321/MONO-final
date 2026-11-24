@@ -22,10 +22,7 @@ struct ProfileView: View {
     /// The user's real collections (P04): ones they created, plus a default
     /// shelf only once it holds something. Not the four fixed hobbies.
     private var myCollections: [PersonalCollection] {
-        let defaults = Set(PersonalCollection.defaults.map(\.id))
-        return store.activeCollections.filter { collection in
-            !defaults.contains(collection.id) || !store.items(in: collection.id).isEmpty
-        }
+        store.visibleCollections()
     }
 
     private var publicCollections: [PersonalCollection] {

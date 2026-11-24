@@ -38,7 +38,7 @@ struct CollectionView: View {
                             Button("Retry sync") { store.retryCloudSync() }
                         }
                         LazyVStack(spacing: 16) {
-                            ForEach(store.activeCollections) { collection in
+                            ForEach(store.visibleCollections()) { collection in
                                 NavigationLink {
                                     ShelfDetailView(category: collection.layout, collectionID: collection.id)
                                 } label: {
@@ -232,7 +232,7 @@ struct CollectionView: View {
                     .foregroundStyle(ArchiveTheme.ink)
                     .tracking(1)
                 Spacer()
-                Text("\(store.activeCollections.count) COLLECTIONS")
+                Text("\(store.visibleCollections().count) COLLECTIONS")
                     .font(ArchiveTheme.label(10))
                     .foregroundStyle(ArchiveTheme.catalogGray)
             }
