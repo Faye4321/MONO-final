@@ -80,6 +80,8 @@ struct ChatView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer
         }
+        // Chat uses the whole bottom edge for the composer.
+        .hidesMonoTabBar()
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(
             ArchiveTheme.ivory,

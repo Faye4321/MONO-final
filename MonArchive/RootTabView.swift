@@ -14,6 +14,8 @@ struct RootTabView: View {
     /// The floating tab bar steps aside while typing, so it never sits on
     /// top of the keyboard or covers search results (P13).
     @State private var keyboardVisible = false
+    /// Set by pages that need the whole bottom edge (e.g. chat).
+    @State private var hiddenByPage = false
 
     var body: some View {
         // The system tab bar is hidden on every tab; MonoTabBar below replaces
@@ -41,12 +43,13 @@ struct RootTabView: View {
         }
         .tint(ArchiveTheme.collectedRed)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !keyboardVisible {
+            if !keyboardVisible && !hiddenByPage {
                 MonoTabBar(selection: selection) { tab in
                     if tab == .create { showingCreate = true } else { selection = tab }
                 }
             }
         }
+        .onPreferenceChange(MonoTabBarHiddenKey.self) { hiddenByPage = $0 }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardVisible = true
         }
@@ -137,6 +140,17 @@ struct CreateTabButton: View {
             .background(isSelected ? ArchiveTheme.collectedRed : ArchiveTheme.ink, in: Circle())
             .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
     }
+}
+
+/// Pages that need the whole bottom edge (like chat) hide the tab bar with
+/// `.hidesMonoTabBar()`; it comes back when they're popped.
+struct MonoTabBarHiddenKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+extension View {
+    func hidesMonoTabBar() -> some View { preference(key: MonoTabBarHiddenKey.self, value: true) }
 }
 
 /// The app's floating tab bar: five strictly equal slots on liquid glass.

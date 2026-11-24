@@ -36,6 +36,8 @@ struct CreateSharedCollectionView: View {
         return !name.isEmpty && name.count <= 150 && !socialStore.cloudBusy
     }
 
+    @State private var keyboardVisible = false
+
     var body: some View {
         ZStack {
             ArchiveTheme.ivory
@@ -58,6 +60,12 @@ struct CreateSharedCollectionView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             createButton
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(
@@ -359,7 +367,9 @@ struct CreateSharedCollectionView: View {
         .disabled(canCreate == false)
         .padding(.horizontal, 18)
         .padding(.top, 12)
-        .padding(.bottom, 8)
+        // Sit above the floating tab bar, which overlays this pushed page;
+        // the bar hides while typing, so then hug the keyboard instead.
+        .padding(.bottom, keyboardVisible ? 8 : MonoTabBar.height + 16)
         .background(
             ArchiveTheme.ivory.opacity(0.97)
         )
