@@ -104,6 +104,29 @@ service cloud.firestore {
           && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.memberNames[request.auth.uid] is string
           && request.resource.data.memberNames[request.auth.uid].size() <= 100)
+        ||
+        // The owner removes other members (never themself); their names go with them.
+        (resource.data.ownerUID == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUIDs', 'memberNames', 'updatedAt'])
+          && request.resource.data.memberUIDs is list
+          && resource.data.memberUIDs.toSet().hasAll(request.resource.data.memberUIDs)
+          && request.resource.data.memberUIDs.toSet().size() < resource.data.memberUIDs.toSet().size()
+          && request.auth.uid in request.resource.data.memberUIDs
+          && request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).affectedKeys()
+               == request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).removedKeys()
+          && request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).removedKeys()
+               .difference(resource.data.memberUIDs.toSet().difference(request.resource.data.memberUIDs.toSet())).size() == 0)
+        ||
+        // A member who isn't the owner leaves: only their own uid and name are removed.
+        (request.auth.uid in resource.data.memberUIDs
+          && resource.data.ownerUID != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUIDs', 'memberNames', 'updatedAt'])
+          && request.resource.data.memberUIDs is list
+          && request.resource.data.memberUIDs.toSet() == resource.data.memberUIDs.toSet().difference([request.auth.uid].toSet())
+          && request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).affectedKeys()
+               == request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).removedKeys()
+          && request.resource.data.get('memberNames', {}).diff(resource.data.get('memberNames', {})).removedKeys()
+               .hasOnly([request.auth.uid]))
       );
       allow delete: if signedIn() && resource.data.ownerUID == request.auth.uid;
       match /items/{iid} {

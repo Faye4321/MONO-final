@@ -257,6 +257,61 @@ final class SocialStore: ObservableObject {
         return collection
     }
 
+    // MARK: Membership changes (API shared by the backend and UI work)
+
+    /// Whether the signed-in user created this shared collection.
+    func isOwner(of collection: SharedCollection) -> Bool {
+        collection.ownerID == currentUserID
+    }
+
+    /// Owner only: removes another member. Throws a user-facing error.
+    func removeMember(_ userID: UUID, from collectionID: UUID) async throws {
+        guard let uid = cloudUID else { throw CollectionStore.CloudFailure.message("Sign in first.") }
+        guard let data = metadata[collectionID] else { throw CollectionStore.CloudFailure.message("This collection isn't available right now.") }
+        guard data["ownerUID"] as? String == uid else { throw CollectionStore.CloudFailure.message("Only the person who created this collection can remove members.") }
+        let memberUIDs = data["memberUIDs"] as? [String] ?? []
+        guard let target = memberUIDs.first(where: { Self.socialID($0) == userID }) ?? uidBySocialID[userID],
+              memberUIDs.contains(target) else { throw CollectionStore.CloudFailure.message("This person isn't in the collection anymore.") }
+        guard target != uid else { throw CollectionStore.CloudFailure.message("You can't remove yourself. Delete the collection instead.") }
+        try await updateMembership(collectionID, removing: target)
+        guard cloudUID == uid else { return }
+        var updated = data
+        updated["memberUIDs"] = memberUIDs.filter { $0 != target }
+        if var names = data["memberNames"] as? [String: Any] { names.removeValue(forKey: target); updated["memberNames"] = names }
+        metadata[collectionID] = updated
+        if let index = sharedCollections.firstIndex(where: { $0.id == collectionID }) {
+            sharedCollections[index].memberIDs.removeAll { $0 == userID }
+        }
+    }
+
+    /// Non-owner member: leaves the collection. Throws a user-facing error.
+    func leaveCollection(_ collectionID: UUID) async throws {
+        guard let uid = cloudUID else { throw CollectionStore.CloudFailure.message("Sign in first.") }
+        let owner = metadata[collectionID]?["ownerUID"] as? String
+            ?? sharedCollections.first(where: { $0.id == collectionID }).map { $0.ownerID == currentUserID ? uid : "" }
+        guard owner != uid else { throw CollectionStore.CloudFailure.message("You created this collection. Delete it instead of leaving.") }
+        try await updateMembership(collectionID, removing: uid)
+        guard cloudUID == uid else { return }
+        sharedItemListeners.removeValue(forKey: collectionID)?.remove()
+        cloudItems.removeValue(forKey: collectionID)
+        metadata.removeValue(forKey: collectionID)
+        sharedCollections.removeAll { $0.id == collectionID }
+    }
+
+    private func updateMembership(_ collectionID: UUID, removing memberUID: String) async throws {
+        do {
+            try await Firestore.firestore().collection("sharedCollections").document(collectionID.uuidString).updateData([
+                "memberUIDs": FieldValue.arrayRemove([memberUID]),
+                "memberNames." + memberUID: FieldValue.delete(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+        } catch where SocialDirectoryError.isPermission(error) {
+            throw CollectionStore.CloudFailure.message("You don't have permission to change who's in this collection.")
+        } catch {
+            throw CollectionStore.CloudFailure.message("Couldn't update the collection. Check your connection and try again.")
+        }
+    }
+
     func invitation(for id: UUID) -> String? {
         guard let token = metadata[id]?["inviteToken"] as? String else { return nil }
         return "mono://collection?invite=" + token

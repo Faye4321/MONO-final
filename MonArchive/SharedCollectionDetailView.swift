@@ -4,10 +4,19 @@ import UIKit
 struct SharedCollectionDetailView: View {
     @EnvironmentObject private var socialStore: SocialStore
     @EnvironmentObject private var collectionStore: CollectionStore
+    @Environment(\.dismiss) private var dismiss
 
     let collectionID: UUID
 
     @State private var showingItemPicker = false
+    /// Owner only: the member waiting on the remove confirmation.
+    @State private var memberPendingRemoval: SocialUser?
+    /// Owner only: the member whose removal is in flight.
+    @State private var removingMemberID: UUID?
+    /// Member only: the leave confirmation and its in-flight state.
+    @State private var confirmingLeave = false
+    @State private var isLeaving = false
+    @State private var membershipError: String?
 
     private var sharedCollection: SharedCollection? {
         socialStore.sharedCollections.first {
@@ -27,6 +36,13 @@ struct SharedCollectionDetailView: View {
     private var canAddItems: Bool {
         guard let sharedCollection else { return false }
         return sharedCollection.permission == .everyoneCanAdd || sharedCollection.ownerID == socialStore.currentUserID
+    }
+
+    /// Only the owner can remove people, and never themselves or the owner.
+    private func canRemove(_ member: SocialUser, from collection: SharedCollection) -> Bool {
+        socialStore.isOwner(of: collection)
+            && member.id != socialStore.currentUserID
+            && member.id != collection.ownerID
     }
 
     var body: some View {
@@ -68,13 +84,53 @@ struct SharedCollectionDetailView: View {
                         }
                         .disabled(!canAddItems)
 
+                        // Owners delete instead; only members can leave.
+                        if !socialStore.isOwner(of: sharedCollection) {
+                            Divider()
 
+                            Button(role: .destructive) {
+                                membershipError = nil
+                                confirmingLeave = true
+                            } label: {
+                                Label("Leave Collection", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                            .disabled(isLeaving)
+                        }
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(ArchiveTheme.ink)
+                        if isLeaving {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "ellipsis")
+                                .foregroundStyle(ArchiveTheme.ink)
+                        }
                     }
+                    .disabled(isLeaving)
                 }
             }
+        }
+        .confirmationDialog(
+            "Remove \(memberPendingRemoval?.name ?? "this member")?",
+            isPresented: Binding(
+                get: { memberPendingRemoval != nil },
+                set: { if !$0 { memberPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: memberPendingRemoval
+        ) { member in
+            Button("Remove from Collection", role: .destructive) { remove(member) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("They'll lose access to this collection. Objects they added stay.")
+        }
+        .confirmationDialog(
+            "Leave \(sharedCollection?.name ?? "this collection")?",
+            isPresented: $confirmingLeave,
+            titleVisibility: .visible
+        ) {
+            Button("Leave Collection", role: .destructive) { leave() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll lose access until someone invites you again.")
         }
         .sheet(isPresented: $showingItemPicker) {
             SharedCollectionItemPicker(collectionID: collectionID)
@@ -180,20 +236,89 @@ struct SharedCollectionDetailView: View {
                     ForEach(
                         socialStore.members(of: collection)
                     ) { member in
-                        VStack(spacing: 7) {
-                            SocialAvatarView(
-                                user: member,
-                                size: 54
-                            )
-
-                            Text(member.name.uppercased())
-                                .font(ArchiveTheme.label(10))
-                                .foregroundStyle(ArchiveTheme.catalogGray)
-                                .lineLimit(1)
-                        }
-                        .frame(width: 70)
+                        memberAvatar(member, in: collection)
                     }
                 }
+            }
+
+            if let membershipError {
+                Label(membershipError, systemImage: "exclamationmark.triangle")
+                    .font(ArchiveTheme.body(12))
+                    .foregroundStyle(ArchiveTheme.collectedRed)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberAvatar(
+        _ member: SocialUser,
+        in collection: SharedCollection
+    ) -> some View {
+        let avatar = VStack(spacing: 7) {
+            ZStack {
+                SocialAvatarView(
+                    user: member,
+                    size: 54
+                )
+                .opacity(removingMemberID == member.id ? 0.35 : 1)
+
+                if removingMemberID == member.id {
+                    ProgressView()
+                }
+            }
+
+            Text(member.name.uppercased())
+                .font(ArchiveTheme.label(10))
+                .foregroundStyle(ArchiveTheme.catalogGray)
+                .lineLimit(1)
+        }
+        .frame(width: 70)
+
+        if canRemove(member, from: collection) {
+            Button {
+                membershipError = nil
+                memberPendingRemoval = member
+            } label: {
+                avatar.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(removingMemberID != nil)
+            .accessibilityLabel(member.name)
+            .accessibilityHint("Double-tap to remove from collection")
+        } else {
+            avatar
+        }
+    }
+
+    private func remove(_ member: SocialUser) {
+        guard removingMemberID == nil else { return }
+        removingMemberID = member.id
+        membershipError = nil
+        Task { @MainActor in
+            do {
+                try await socialStore.removeMember(member.id, from: collectionID)
+                Haptics.success()
+            } catch {
+                membershipError = "Couldn't remove \(member.name). Check your connection and try again. (\(error.localizedDescription))"
+            }
+            removingMemberID = nil
+        }
+    }
+
+    private func leave() {
+        guard !isLeaving else { return }
+        isLeaving = true
+        membershipError = nil
+        Task { @MainActor in
+            do {
+                try await socialStore.leaveCollection(collectionID)
+                Haptics.success()
+                isLeaving = false
+                dismiss()
+            } catch {
+                isLeaving = false
+                membershipError = "Couldn't leave this collection. Check your connection and try again. (\(error.localizedDescription))"
             }
         }
     }
