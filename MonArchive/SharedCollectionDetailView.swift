@@ -113,6 +113,7 @@ struct SharedCollectionDetailView: View {
             .foregroundStyle(ArchiveTheme.catalogGray)
 
             HStack(spacing: 12) {
+                if FeatureFlags.chatEnabled {
                 NavigationLink {
                     ChatView(sharedCollection: collection)
                 } label: {
@@ -123,6 +124,7 @@ struct SharedCollectionDetailView: View {
                         .padding(.vertical, 14)
                         .background(ArchiveTheme.collectedRed)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
                 }
 
                 Button {
@@ -268,11 +270,13 @@ struct SharedCollectionDetailView: View {
                 time: "TODAY"
             )
 
-            activityRow(
-                icon: "bubble.left",
-                text: "A new message was sent in group chat",
-                time: "RECENTLY"
-            )
+            if FeatureFlags.chatEnabled {
+                activityRow(
+                    icon: "bubble.left",
+                    text: "A new message was sent in group chat",
+                    time: "RECENTLY"
+                )
+            }
         }
     }
 

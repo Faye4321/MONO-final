@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Chat isn't connected to a backend yet (messages stay on the sending phone
+/// and are lost on relaunch), so its entry points are hidden. Flip this once
+/// messages sync through Firestore.
+enum FeatureFlags {
+    static let chatEnabled = false
+}
+
 struct ChatView: View {
     @EnvironmentObject private var socialStore: SocialStore
     @EnvironmentObject private var collectionStore: CollectionStore

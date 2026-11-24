@@ -230,6 +230,7 @@ struct FriendProfileView: View {
 
     private var friendActions: some View {
         HStack(spacing: 10) {
+            if FeatureFlags.chatEnabled {
             NavigationLink {
                 ChatView(friend: user)
             } label: {
@@ -249,6 +250,7 @@ struct FriendProfileView: View {
                 )
             }
             .buttonStyle(.plain)
+            }
 
             NavigationLink {
                 CreateSharedCollectionView(
