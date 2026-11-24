@@ -71,10 +71,14 @@ struct SharedCollectionDetailView: View {
             if let sharedCollection {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        ShareLink(
-                            item: socialStore.invitation(for: sharedCollection.id) ?? "Invitation is still being created"
-                        ) {
-                            Label("Share Invitation", systemImage: "square.and.arrow.up")
+                        // Each link works once; after it's used a new one is made.
+                        if let invitation = socialStore.invitation(for: sharedCollection.id) {
+                            ShareLink(item: invitation) {
+                                Label("Share Invitation", systemImage: "square.and.arrow.up")
+                            }
+                        } else {
+                            Label("Creating a new invitation…", systemImage: "hourglass")
+                                .foregroundStyle(ArchiveTheme.catalogGray)
                         }
 
                         Button {

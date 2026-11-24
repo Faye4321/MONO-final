@@ -96,7 +96,10 @@ service cloud.firestore {
           && request.resource.data.itemIDs.hasAll(resource.data.itemIDs))
         ||
         // A joining user must supply the unguessable invitation token, and may only add themself.
+        // Invitations are single-use: once someone has joined with this token
+        // (joinProof == inviteToken), nobody else can until the owner issues a new one.
         (request.resource.data.joinProof == resource.data.inviteToken
+          && resource.data.get('joinProof', '') != resource.data.inviteToken
           && exists(/databases/$(database)/documents/invites/$(resource.data.inviteToken))
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUIDs', 'memberNames', 'joinProof'])
           && request.resource.data.memberUIDs.toSet() == resource.data.memberUIDs.toSet().union([request.auth.uid].toSet())
@@ -104,6 +107,13 @@ service cloud.firestore {
           && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.memberNames[request.auth.uid] is string
           && request.resource.data.memberNames[request.auth.uid].size() <= 100)
+        ||
+        // The owner replaces a used invitation with a fresh single-use one.
+        (resource.data.ownerUID == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inviteToken', 'joinProof', 'updatedAt'])
+          && request.resource.data.inviteToken is string && request.resource.data.inviteToken.size() == 64
+          && request.resource.data.inviteToken != resource.data.inviteToken
+          && !('joinProof' in request.resource.data))
         ||
         // The owner removes other members (never themself); their names go with them.
         (resource.data.ownerUID == request.auth.uid

@@ -181,6 +181,12 @@ final class SocialStore: ObservableObject {
                               let owner = data["ownerUID"] as? String,
                               let memberUIDs = data["memberUIDs"] as? [String] else { continue }
                         self.metadata[id] = data
+                        // Single-use invitations: once someone joined with the
+                        // current link, the owner's app issues a fresh one.
+                        if owner == uid, let token = data["inviteToken"] as? String,
+                           data["joinProof"] as? String == token {
+                            self.rotateInvitation(id, used: token, uid: uid)
+                        }
                         let names = data["memberNames"] as? [String: String] ?? [:]
                         for memberUID in memberUIDs where memberUID != uid {
                             let socialID = Self.socialID(memberUID)
@@ -312,8 +318,30 @@ final class SocialStore: ObservableObject {
         }
     }
 
+    private var rotatingInvitations: Set<UUID> = []
+
+    /// Owner only: replaces a used invitation with a new single-use one and
+    /// removes the old invite document, so the old link stops working.
+    private func rotateInvitation(_ id: UUID, used oldToken: String, uid: String) {
+        guard rotatingInvitations.insert(id).inserted else { return }
+        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        Task { @MainActor in
+            defer { self.rotatingInvitations.remove(id) }
+            let db = Firestore.firestore()
+            let batch = db.batch()
+            batch.updateData(["inviteToken": token, "joinProof": FieldValue.delete(), "updatedAt": FieldValue.serverTimestamp()],
+                             forDocument: db.collection("sharedCollections").document(id.uuidString))
+            batch.setData(["collectionID": id.uuidString, "ownerUID": uid], forDocument: db.collection("invites").document(token))
+            batch.deleteDocument(db.collection("invites").document(oldToken))
+            do { try await batch.commit() }
+            catch { if self.cloudUID == uid { self.cloudError = "Couldn't create a new invitation link. " + error.localizedDescription } }
+        }
+    }
+
+    /// nil while a used (single-use) invitation is being replaced.
     func invitation(for id: UUID) -> String? {
-        guard let token = metadata[id]?["inviteToken"] as? String else { return nil }
+        guard let token = metadata[id]?["inviteToken"] as? String,
+              metadata[id]?["joinProof"] as? String != token else { return nil }
         return "mono://collection?invite=" + token
     }
 
@@ -347,7 +375,7 @@ final class SocialStore: ObservableObject {
                 "memberNames." + uid: label
             ])
         } catch where SocialDirectoryError.isPermission(error) {
-            throw CollectionStore.CloudFailure.message("You can't join this collection. It may be full, or the invitation was replaced.")
+            throw CollectionStore.CloudFailure.message("This invitation has already been used or was replaced. Ask for a new link.")
         }
     }
 
