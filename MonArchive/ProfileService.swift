@@ -206,25 +206,11 @@ struct LocalProfileService: ProfileServicing {
 
     func isHandleAvailable(_ handle: String) async throws -> Bool {
         try await simulateNetwork()
-        return !DemoCollectors.all.contains { HandleRules.normalized($0.handle) == handle }
+        return true
     }
 
-    func searchUsers(matching query: String) async throws -> [SocialUser] {
-        try await simulateNetwork()
-        let query = HandleRules.normalized(query)
-        guard !query.isEmpty else { return [] }
-        return DemoCollectors.all
-            .filter { user in
-                HandleRules.normalized(user.handle).contains(query)
-                    || user.name.lowercased().contains(query)
-            }
-            .sorted { lhs, rhs in
-                // Handles that start with the query first.
-                let left = HandleRules.normalized(lhs.handle).hasPrefix(query)
-                let right = HandleRules.normalized(rhs.handle).hasPrefix(query)
-                return left && !right
-            }
-    }
+    /// No directory offline; FriendsView searches through SocialStore.
+    func searchUsers(matching query: String) async throws -> [SocialUser] { [] }
 
     func loadVisibility() async throws -> [String: CollectionVisibility] {
         try await simulateNetwork()

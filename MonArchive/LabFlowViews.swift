@@ -11,7 +11,7 @@ private enum LabFlowStep {
 }
 
 struct LabRootView: View {
-    var collectionProvider: any LabCollectionProviding = SampleLabCollectionProvider()
+    var collectionProvider: any LabCollectionProviding
 
     @State private var step: LabFlowStep = .home
     @State private var project = LabProject()
@@ -19,7 +19,7 @@ struct LabRootView: View {
 
     // Explicit so other files can pass a provider; the synthesized
     // memberwise init is private because of the private state above.
-    init(collectionProvider: any LabCollectionProviding = SampleLabCollectionProvider()) {
+    init(collectionProvider: any LabCollectionProviding) {
         self.collectionProvider = collectionProvider
     }
 

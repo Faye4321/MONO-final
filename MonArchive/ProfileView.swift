@@ -88,7 +88,6 @@ struct ProfileView: View {
             }
             .task { await profileStore.loadIfNeeded() }
             .onAppear {
-                socialStore.seedSharedCollectionItems(from: store.items)
                 publishStats()
             }
             .onChange(of: store.activeItems.count) { _, _ in publishStats() }

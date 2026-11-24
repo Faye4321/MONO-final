@@ -7,9 +7,6 @@ struct CollectionView: View {
     @State private var showingNewCollection = false
     @State private var showingDeletedCollections = false
     @State private var collectionPendingDeletion: PersonalCollection?
-    @State private var confirmingSampleRemoval = false
-    @State private var decidingSamples = false
-    @State private var sampleError: String?
 
     init(onProfileTapped: @escaping () -> Void = {}) {
         self.onProfileTapped = onProfileTapped
@@ -24,8 +21,6 @@ struct CollectionView: View {
                     VStack(alignment: .leading, spacing: 26) {
                         header
                         archiveSummary
-                        if store.defaultCleanupOffered { sampleCleanupOffer }
-                        if !store.sampleUndo.isEmpty { sampleUndoNotice }
 
                         Text("YOUR COLLECTIONS")
                             .font(ArchiveTheme.label(11))
@@ -100,86 +95,11 @@ struct CollectionView: View {
         } message: {
             Text("Your objects and photos will be kept in Unfiled. Restore this collection from Recently deleted to undo.")
         }
-        .confirmationDialog("Remove sample objects?", isPresented: $confirmingSampleRemoval, titleVisibility: .visible) {
-            Button("Remove examples", role: .destructive) { decideSamples(remove: true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your uploads and collections stay. Only the sample objects are removed.")
-        }
         .sheet(isPresented: $showPlan) {
             ArchivePlanView(objectCount: store.items.count)
                 .environment(\.colorScheme, .light)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-        }
-    }
-
-    private var sampleCleanupOffer: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(ArchiveTheme.collectedRed)
-                    .frame(width: 34, height: 34)
-                    .background(ArchiveTheme.collectedRed.opacity(0.08), in: Circle())
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Make it yours").font(ArchiveTheme.heading(16))
-                    Text("\(store.defaultExampleCount) sample objects · Your uploads stay")
-                        .font(ArchiveTheme.body(12))
-                        .foregroundStyle(ArchiveTheme.catalogGray)
-                }
-            }
-            HStack(spacing: 10) {
-                Button { confirmingSampleRemoval = true } label: {
-                    HStack(spacing: 6) {
-                        Text("REMOVE EXAMPLES")
-                        Image(systemName: "trash")
-                    }
-                    .font(ArchiveTheme.label(9))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(.white)
-                    .background(ArchiveTheme.collectedRed, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                Button { decideSamples(remove: false) } label: {
-                    Text("KEEP EXAMPLES")
-                        .font(ArchiveTheme.label(9))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .foregroundStyle(ArchiveTheme.ink)
-                        .background(.white.opacity(0.8), in: Capsule())
-                        .overlay { Capsule().stroke(ArchiveTheme.catalogGray.opacity(0.2), lineWidth: 1) }
-                }
-                .buttonStyle(.plain)
-            }
-            if let sampleError { Text(sampleError).font(.caption).foregroundStyle(.red) }
-            if decidingSamples { ProgressView("Saving…").font(.caption) }
-        }
-        .foregroundStyle(ArchiveTheme.ink)
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ArchiveTheme.collectedRed.opacity(0.035), in: RoundedRectangle(cornerRadius: 18))
-        .overlay { RoundedRectangle(cornerRadius: 18).stroke(ArchiveTheme.collectedRed.opacity(0.16), lineWidth: 1) }
-        .disabled(decidingSamples)
-    }
-
-    private var sampleUndoNotice: some View {
-        HStack {
-            Text("Default examples removed").font(.caption)
-            Spacer()
-            Button("Undo") { store.undoSampleRemoval() }
-            Button { store.dismissSampleUndo() } label: { Image(systemName: "xmark") }
-                .accessibilityLabel("Dismiss undo")
-        }.padding(14)
-    }
-
-    private func decideSamples(remove: Bool) {
-        decidingSamples = true; sampleError = nil
-        Task { @MainActor in
-            defer { decidingSamples = false }
-            do { try await store.completeSampleChoice(remove: remove) }
-            catch { sampleError = error.localizedDescription }
         }
     }
 

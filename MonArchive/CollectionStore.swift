@@ -14,8 +14,50 @@ final class CollectionStore: ObservableObject {
     /// The archive file; also what the Profile export shares.
     private(set) var archiveURL: URL
     private let legacyURL: URL
-    private let seedItems: [CollectibleItem]
-    private let seedIDs: Set<UUID>
+    /// The 40 demo objects earlier builds shipped with. Kept only so old
+    /// caches and cloud records that still hold them get cleaned out.
+    private static let retiredDemoIDs: Set<UUID> = Set([
+        "C7EB487F-EBDE-57EB-A5FC-A8CBFAD4C45B",
+        "182F990F-6AB5-5FF8-BBA5-A260187F35EF",
+        "5F04EAC7-BE60-5DA4-B7AB-52B4EBC5B446",
+        "0A26BC6E-9F87-53E7-83F5-F444A09D0569",
+        "1BFE5112-7C8D-55AF-A723-70B47A2F6155",
+        "5F08E9C1-C9E3-52D7-9129-50E2DB136D6B",
+        "CA858FB2-B30F-5D80-9A53-DF9133358412",
+        "05633097-0353-597B-92E5-28CB74364566",
+        "593D360B-0C59-5DC1-9560-98C4F8F9EB11",
+        "610EB668-621A-572E-8E62-BD9901FE7C54",
+        "5EDF3870-9517-55F9-8E22-F201C34C9267",
+        "CE611705-4AD9-5B54-9389-D3DDCA094334",
+        "D8FAF207-0B43-5A23-BFCA-EBD538FCB14E",
+        "56452ECA-E5DD-547E-B010-F62E7FBB1E8B",
+        "547846F9-4E81-5389-88FA-FCDB5127289F",
+        "58F3CDE6-9E1D-5F11-911C-C87B1F59C261",
+        "0CB0643A-68BF-5459-8889-7B48ECAB25FD",
+        "3AA49C75-EBF8-503C-A6EB-8E51AA4417CD",
+        "43692834-8CCC-55E5-96CC-03C0DBEA77E8",
+        "A1570EAC-9EF2-5102-BE29-E391B13911A3",
+        "7B89E12D-E43B-5518-B8EC-87429A6CDB84",
+        "500AF233-5716-51C6-8FD7-BBD58FAFE354",
+        "AFA6E2FD-B7E7-56A4-BF07-489B20A91DDC",
+        "03A2B7F2-9764-5F3C-AF92-72EF00BA2871",
+        "2E4F7381-2051-58CF-9749-F8170357E169",
+        "709CD219-7AB6-557C-9BFF-4A4CB2912C49",
+        "E13A3C10-0248-5D59-822E-E8A8EC38CF31",
+        "ECB3C612-08F7-5E25-A965-76858CBE173F",
+        "881E2E3E-4CE9-536B-8021-7B931AA9786F",
+        "8B6158D2-FA60-5381-B676-6E70AAA75785",
+        "F8A52676-7CB5-5ADD-8185-57E9FE7D78E2",
+        "2469CD03-F725-5BB3-8314-D6617CAE1770",
+        "ED277C60-87FD-513D-BA0C-9B3B19207766",
+        "87892366-6A73-5A99-A44F-E17A0CAEE501",
+        "E9367DCD-44B3-58D2-9033-5F846D0EC126",
+        "D3693804-417C-55D4-B6AA-426A775DC1D8",
+        "19D1A576-657F-5703-BEA6-8E5194CC30A9",
+        "E34E7F0D-DCE3-5EAE-9501-C62A8F5EAEE3",
+        "19B4F10F-78C5-5D33-BAA4-29F58A1FB311",
+        "8CD237ED-038B-5C6C-90D4-B7DA89251671",
+    ].compactMap(UUID.init(uuidString:)))
 
     private struct ArchiveFile: Codable {
         var version = 1
@@ -27,26 +69,14 @@ final class CollectionStore: ObservableObject {
         var deletedSeedIDs: [UUID]? = nil
     }
 
-    init(seedItems: [CollectibleItem] = SeedData.itemsWithDemoDates) {
+    init() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         archiveURL = documents.appendingPathComponent("archive.json")
         legacyURL = documents.appendingPathComponent("uploaded-objects.json")
-        self.seedItems = seedItems
-        seedIDs = Set(seedItems.map(\.id))
 
+        // A new install starts empty: no demo objects.
         let archive = Self.loadArchive(from: archiveURL, legacyURL: legacyURL)
-        let overrides = Dictionary(
-            archive.seedOverrides.map { ($0.id, $0) },
-            uniquingKeysWith: { _, latest in latest }
-        )
-
-        let deletedSeedIDs = Set(archive.deletedSeedIDs ?? [])
-        items = seedItems.filter { !deletedSeedIDs.contains($0.id) }.map { seed in
-            guard var edited = overrides[seed.id] else { return seed }
-            // Edits saved before `addedOn` existed keep the seed's date.
-            if edited.addedOn == nil { edited.addedOn = seed.addedOn }
-            return edited
-        } + archive.userItems
+        items = archive.userItems.filter { !Self.retiredDemoIDs.contains($0.id) }
         moments = archive.moments
 
         if !FileManager.default.fileExists(atPath: archiveURL.path) {
@@ -136,10 +166,8 @@ final class CollectionStore: ObservableObject {
             pendingPhotoDeletes = cache.pendingPhotoDeletes
             cloudReady = true
         }
-        // Signed-in accounts never show the bundled demo objects (Chloe's
-        // H05/H07): a new account starts empty and fills up from its own
-        // uploads. Older caches may still hold them, so drop them here.
-        items.removeAll(where: isBundledSample)
+        // Older caches may still hold the retired demo objects.
+        items.removeAll(where: isRetiredDemo)
         savedItems = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
         savedMoments = Dictionary(uniqueKeysWithValues: moments.map { ($0.id, $0) })
         hasLegacyArchive = !UserDefaults.standard.bool(forKey: "mono.legacyImported") &&
@@ -188,7 +216,7 @@ final class CollectionStore: ObservableObject {
                       let data = payload.data(using: .utf8),
                       let value = try? JSONDecoder().decode(CollectibleItem.self, from: data), value.id == id,
                       value.imageFileName.map(Self.validPhotoName) ?? true {
-                guard !isBundledSample(value) else { continue }
+                guard !isRetiredDemo(value) else { continue }
                 byID[id] = value; deletedItems.remove(id)
                 if let name = value.imageFileName { uploadedNames.insert(name) }
             }
@@ -465,26 +493,18 @@ final class CollectionStore: ObservableObject {
 
     @Published private(set) var collections = PersonalCollection.defaults
     @Published private(set) var catalogReady = false
-    @Published private(set) var sampleChoiceMade = false
-    @Published private(set) var sampleOfferEligible = false
     @Published var onboardingPreferredCollectionID: UUID?
     @Published private(set) var catalogError: String?
     @Published private(set) var catalogSyncing = false
-    @Published private(set) var sampleUndo: [CollectibleItem] = []
     private var catalogListener: ListenerRegistration?
-    private var setupListener: ListenerRegistration?
     private var catalogUID: String?
     private var collectionRevisions: [UUID: UUID] = [:]
     private var catalogTask: Task<Void, Never>?
-    private var preparingSampleOfferUID: String?
     private var receivedCatalog = false
-    private var receivedSetup = false
 
     private struct CatalogCache: Codable {
         var collections: [PersonalCollection]
         var pending: [UUID: UUID]
-        var sampleChoiceMade: Bool
-        var sampleOfferEligible: Bool?
     }
 
     var activeCollections: [PersonalCollection] { collections.filter { $0.deletedAt == nil } }
@@ -560,19 +580,18 @@ final class CollectionStore: ObservableObject {
 
     private func persistCatalog() {
         guard let uid = catalogUID else { return }
-        let value = CatalogCache(collections: collections, pending: collectionRevisions,
-            sampleChoiceMade: sampleChoiceMade, sampleOfferEligible: sampleOfferEligible)
+        let value = CatalogCache(collections: collections, pending: collectionRevisions)
         do { UserDefaults.standard.set(try JSONEncoder().encode(value), forKey: catalogCacheKey(uid)) }
         catch { catalogError = error.localizedDescription }
     }
 
     private func stopCatalog() {
-        catalogListener?.remove(); setupListener?.remove(); catalogTask?.cancel()
-        catalogListener = nil; setupListener = nil; catalogTask = nil; catalogUID = nil
+        catalogListener?.remove(); catalogTask?.cancel()
+        catalogListener = nil; catalogTask = nil; catalogUID = nil
         collections = PersonalCollection.defaults; collectionRevisions = [:]
-        catalogReady = false; sampleChoiceMade = false; sampleOfferEligible = false
+        catalogReady = false
         onboardingPreferredCollectionID = nil; catalogError = nil; catalogSyncing = false
-        receivedCatalog = false; receivedSetup = false; sampleUndo = []
+        receivedCatalog = false
     }
 
     private func startCatalog(uid: String) {
@@ -580,8 +599,6 @@ final class CollectionStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: catalogCacheKey(uid)),
            let cache = try? JSONDecoder().decode(CatalogCache.self, from: data) {
             collections = cache.collections; collectionRevisions = cache.pending
-            sampleChoiceMade = cache.sampleChoiceMade
-            sampleOfferEligible = cache.sampleOfferEligible ?? false
             catalogReady = true
         }
         let root = Firestore.firestore().collection("users").document(uid)
@@ -602,31 +619,15 @@ final class CollectionStore: ObservableObject {
                 self.finishCatalogLoad()
             }
         }
-        setupListener = root.collection("settings").document("onboarding").addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
-            Task { @MainActor in
-                guard let self, self.catalogUID == uid else { return }
-                if let error { self.catalogError = error.localizedDescription; return }
-                guard let snapshot else { return }
-                if snapshot.data()?["sampleChoiceMade"] as? Bool == true { self.sampleChoiceMade = true }
-                if let eligible = snapshot.data()?["sampleOfferEligible"] as? Bool {
-                    self.sampleOfferEligible = eligible
-                } else if !snapshot.metadata.isFromCache { self.sampleOfferEligible = false }
-                if !snapshot.metadata.isFromCache { self.receivedSetup = true }
-                self.finishCatalogLoad()
-            }
-        }
     }
 
     private func finishCatalogLoad() {
-        if receivedCatalog && receivedSetup { catalogReady = true }
+        if receivedCatalog { catalogReady = true }
         persistCatalog()
         retryCatalogSync()
     }
 
     private func retryCatalogSync() {
-        if let uid = catalogUID, UserDefaults.standard.bool(forKey: catalogCacheKey(uid) + ".newAccountOfferPending") {
-            requestDefaultCleanupOfferForNewAccount()
-        }
         guard let uid = catalogUID, catalogReady, !catalogSyncing, !collectionRevisions.isEmpty else { return }
         catalogSyncing = true; catalogError = nil
         catalogTask = Task { @MainActor [weak self] in
@@ -650,110 +651,12 @@ final class CollectionStore: ObservableObject {
         }
     }
 
-    var defaultCleanupOffered: Bool {
-        catalogReady && sampleOfferEligible && !sampleChoiceMade && defaultExampleCount > 0
-    }
-
-    /// A bundled demo object the user didn't create themselves.
-    func isBundledSample(_ item: CollectibleItem) -> Bool {
-        !item.isUserCreated && seedIDs.contains(item.id)
+    /// One of the retired demo objects (never something the user made).
+    private func isRetiredDemo(_ item: CollectibleItem) -> Bool {
+        !item.isUserCreated && Self.retiredDemoIDs.contains(item.id)
     }
 
 
-    /// Called by the new-account registration flow only. Returning logins never re-enable this offer.
-    func requestDefaultCleanupOfferForNewAccount() {
-        guard let uid = Auth.auth().currentUser?.uid, preparingSampleOfferUID != uid else { return }
-        let pendingKey = catalogCacheKey(uid) + ".newAccountOfferPending"
-        UserDefaults.standard.set(true, forKey: pendingKey)
-        preparingSampleOfferUID = uid
-        Task { @MainActor in
-            defer { if self.preparingSampleOfferUID == uid { self.preparingSampleOfferUID = nil } }
-            do {
-                try await Firestore.firestore().collection("users").document(uid).collection("settings").document("onboarding")
-                    .setData(["sampleOfferEligible": true], merge: true)
-                UserDefaults.standard.removeObject(forKey: pendingKey)
-            } catch {
-                if self.accountUID == uid { self.catalogError = "Could not prepare the first-time sample choice. " + error.localizedDescription }
-            }
-        }
-    }
-
-    var defaultExampleCount: Int {
-        let ids = Set(seedItems.map(\.id))
-        return items.filter { ids.contains($0.id) && !$0.isUserCreated }.count
-    }
-
-    /// One account-wide decision, committed atomically with any sample tombstones.
-    /// Transactions fail offline rather than silently repeating a one-time decision on another device.
-    func completeSampleChoice(remove: Bool) async throws {
-        guard let uid = accountUID, defaultCleanupOffered else { throw CloudFailure.message("This first-time option is not available for this account.") }
-        let seedIDs = Set(seedItems.map(\.id))
-        let examples = items.filter { seedIDs.contains($0.id) && !$0.isUserCreated }
-        guard Set(examples.map(\.id)).isDisjoint(with: Set(dirtyItems.keys)) else {
-            throw CloudFailure.message("Wait for sample-object edits to finish syncing, then try again.")
-        }
-        let setup = Firestore.firestore().collection("users").document(uid).collection("settings").document("onboarding")
-        let targets = remove ? examples : []
-        let records = try targets.map { item in
-            (item.id, String(decoding: try JSONEncoder().encode(item), as: UTF8.self))
-        }
-        let db = Firestore.firestore()
-        let result = try await db.runTransaction { transaction, errorPointer -> Any? in
-            do {
-                let existing = try transaction.getDocument(setup)
-                if existing.data()?["sampleChoiceMade"] as? Bool == true {
-                    return ["applied": false, "removed": [String]()] as [String: Any]
-                }
-                guard existing.data()?["sampleOfferEligible"] as? Bool == true else {
-                    throw NSError(domain: "MONO.Onboarding", code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "This option is only available after new-account registration."])
-                }
-                // Read every target before issuing any writes (Firestore transaction requirement).
-                let refs = records.map { db.collection("users").document(uid).collection("items").document($0.0.uuidString) }
-                let documents = try refs.map { try transaction.getDocument($0) }
-                var removedPayloads: [String] = []
-                for index in records.indices {
-                    if documents[index].data()?["deleted"] as? Bool == true { continue }
-                    var payload = records[index].1
-                    if let old = documents[index].data()?["payload"] as? String {
-                        guard let bytes = old.data(using: .utf8),
-                              let current = try? JSONDecoder().decode(CollectibleItem.self, from: bytes),
-                              current.id == records[index].0, !current.isUserCreated else { continue }
-                        payload = old
-                    }
-                    removedPayloads.append(payload)
-                    transaction.setData(["deleted": true, "payload": payload, "updatedAt": FieldValue.serverTimestamp()], forDocument: refs[index])
-                }
-                transaction.setData(["sampleChoiceMade": true, "removedExamples": remove,
-                    "updatedAt": FieldValue.serverTimestamp()], forDocument: setup, merge: true)
-                return ["applied": true, "removed": removedPayloads] as [String: Any]
-            } catch { errorPointer?.pointee = error as NSError; return nil }
-        }
-        try checkSession(uid)
-        sampleChoiceMade = true
-        if let outcome = result as? [String: Any], outcome["applied"] as? Bool == true && remove {
-            sampleUndo = (outcome["removed"] as? [String] ?? []).compactMap {
-                guard let bytes = $0.data(using: .utf8) else { return nil }
-                return try? JSONDecoder().decode(CollectibleItem.self, from: bytes)
-            }
-            let ids = Set(sampleUndo.map(\.id))
-            items.removeAll { ids.contains($0.id) }
-            deletedItems.formUnion(ids)
-            savedItems = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-            persistAccount()
-        }
-        persistCatalog()
-    }
-
-    func undoSampleRemoval() {
-        guard !sampleUndo.isEmpty else { return }
-        let current = Set(items.map(\.id))
-        items.append(contentsOf: sampleUndo.filter { !current.contains($0.id) })
-        sampleUndo = []
-        save()
-    }
-
-    func dismissSampleUndo() { sampleUndo = [] }
 
     // MARK: - Objects
 
@@ -963,16 +866,7 @@ final class CollectionStore: ObservableObject {
             recordLocalChanges()
             return
         }
-        let seedByID = Dictionary(uniqueKeysWithValues: seedItems.map { ($0.id, $0) })
-        let archive = ArchiveFile(
-            userItems: items.filter { seedByID[$0.id] == nil },
-            seedOverrides: items.filter { item in
-                guard let seed = seedByID[item.id] else { return false }
-                return seed != item
-            },
-            moments: moments,
-            deletedSeedIDs: seedItems.map(\.id).filter { id in !items.contains { $0.id == id } }
-        )
+        let archive = ArchiveFile(userItems: items, seedOverrides: [], moments: moments)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

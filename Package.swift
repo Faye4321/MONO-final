@@ -17,8 +17,8 @@ let package = Package(
                 "CollectionCard.swift", "CollectionStore.swift", "CollectionView.swift", "CreateFlowView.swift", "CreateSharedCollectionView.swift",
                 "CSVImporter.swift", "FriendProfileView.swift", "FriendsView.swift", "HomeSupport.swift", "HomeView.swift", "ImageStore.swift",
                 "ItemDetailView.swift", "JourneyViews.swift", "LabEditorViews.swift", "LabFlowViews.swift", "LabImageServices.swift", "LabModels.swift",
-                "Memory.swift", "MemoryComponents.swift", "MockData.swift", "MomentEditorView.swift", "MonArchiveApp.swift", "MonoLogoView.swift",
-                "OnboardingFlow.swift", "ProfileView.swift", "RootTabView.swift", "SeedData.swift", "ShareCard.swift", "SharedCollectionDetailView.swift",
+                "Memory.swift", "MemoryComponents.swift", "MomentEditorView.swift", "MonArchiveApp.swift", "MonoLogoView.swift",
+                "OnboardingFlow.swift", "ProfileView.swift", "RootTabView.swift", "ShareCard.swift", "SharedCollectionDetailView.swift",
                 "ShelfDetailView.swift", "SocialModels.swift", "SocialStore.swift", "Explore/ExploreComponents.swift", "Explore/ExploreSearchView.swift",
                 "Explore/ExplorePreviewData.swift"
             ],

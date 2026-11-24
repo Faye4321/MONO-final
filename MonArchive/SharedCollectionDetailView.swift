@@ -141,12 +141,6 @@ struct SharedCollectionDetailView: View {
                 .environmentObject(socialStore)
                 .environmentObject(collectionStore)
         }
-        .onAppear {
-            // Gives the demo shared collection some existing objects.
-            socialStore.seedSharedCollectionItems(
-                from: collectionStore.items
-            )
-        }
     }
 
     private func collectionHeader(

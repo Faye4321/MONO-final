@@ -28,7 +28,6 @@
 		A10000000000000000000002 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* AppTheme.swift */; };
 		A10000000000000000000003 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* Models.swift */; };
 		A10000000000000000000004 /* CollectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* CollectionStore.swift */; };
-		A10000000000000000000005 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* MockData.swift */; };
 		A10000000000000000000006 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* RootTabView.swift */; };
 		A10000000000000000000007 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* CollectionView.swift */; };
 		A10000000000000000000008 /* CollectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* CollectionCard.swift */; };
@@ -36,7 +35,6 @@
 		A1000000000000000000000A /* ArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* ArtworkView.swift */; };
 		A1000000000000000000000B /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ItemDetailView.swift */; };
 		A1000000000000000000000C /* CreateFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* CreateFlowView.swift */; };
-		A1000000000000000000000D /* SeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* SeedData.swift */; };
 		A1000000000000000000000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* Assets.xcassets */; };
 		A1000000000000000000001F /* ShopPicks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* ShopPicks.swift */; };
 		A10000000000000000000030 /* archive_bjd.wav in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* archive_bjd.wav */; };
@@ -87,7 +85,6 @@
 		B10000000000000000000002 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* CollectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionStore.swift; sourceTree = "<group>"; };
-		B10000000000000000000005 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 		B10000000000000000000006 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		B10000000000000000000007 /* CollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionView.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* CollectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionCard.swift; sourceTree = "<group>"; };
@@ -95,7 +92,6 @@
 		B1000000000000000000000A /* ArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000B /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000C /* CreateFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlowView.swift; sourceTree = "<group>"; };
-		B1000000000000000000000D /* SeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedData.swift; sourceTree = "<group>"; };
 		B1000000000000000000000E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B1000000000000000000001F /* ShopPicks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopPicks.swift; sourceTree = "<group>"; };
 		B10000000000000000000030 /* archive_bjd.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = archive_bjd.wav; sourceTree = "<group>"; };
@@ -174,7 +170,6 @@
 				B10000000000000000000002 /* AppTheme.swift */,
 				B10000000000000000000003 /* Models.swift */,
 				B10000000000000000000004 /* CollectionStore.swift */,
-				B1000000000000000000000D /* SeedData.swift */,
 				D12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift */,
 				67F2AEB930A3F60C009E1476 /* GoogleService-Info.plist */,
 				D16E806CA484B33746C4F0ED /* MonoLogoView.swift */,
@@ -195,7 +190,6 @@
 				D10C68B349B5E90FA3E3CECA /* Memory.swift */,
 				D19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift */,
 				B1000000000000000000001F /* ShopPicks.swift */,
-				B10000000000000000000005 /* MockData.swift */,
 				B1000000000000000000000E /* Assets.xcassets */,
 				B10000000000000000000030 /* archive_bjd.wav */,
 				B10000000000000000000031 /* archive_photocard.wav */,
@@ -339,7 +333,6 @@
 				932DBE813074D10700E5FAC0 /* HomeSupport.swift in Sources */,
 				935164EA308742E300B193C6 /* SharedCollectionDetailView.swift in Sources */,
 				A10000000000000000000004 /* CollectionStore.swift in Sources */,
-				A1000000000000000000000D /* SeedData.swift in Sources */,
 				C12F7357CB3B95C72F19FC83 /* OnboardingFlow.swift in Sources */,
 				C16E806CA484B33746C4F0ED /* MonoLogoView.swift in Sources */,
 				C1A5E4DCF587B1F2C572CC97 /* LabEditorViews.swift in Sources */,
@@ -359,7 +352,6 @@
 				C10C68B349B5E90FA3E3CECA /* Memory.swift in Sources */,
 				C19EE8CFB57CBAFECC2FD0E2 /* ImageStore.swift in Sources */,
 				A1000000000000000000001F /* ShopPicks.swift in Sources */,
-				A10000000000000000000005 /* MockData.swift in Sources */,
 				935164E83087408300B193C6 /* CreateSharedCollectionView.swift in Sources */,
 				935164DC3087397200B193C6 /* SocialModels.swift in Sources */,
 				A10000000000000000000006 /* RootTabView.swift in Sources */,

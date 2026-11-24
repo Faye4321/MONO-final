@@ -73,7 +73,6 @@ struct AppRootView: View {
             case .signUp:
                 AuthenticationView(mode: .signUp, onBack: { transition(to: .welcome) }) { name in
                     newMemberName = name
-                    store.requestDefaultCleanupOfferForNewAccount()
                     // Saves the name to the ME page (and Firestore) and suggests a handle from it.
                     Task { await ProfileStore.shared.applySignUp(name: name) }
                     transition(to: .setupWelcome)

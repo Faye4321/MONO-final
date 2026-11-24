@@ -194,51 +194,6 @@ protocol LabCollectionProviding {
     func fetchCollectionItems() async -> [LabCollectionItem]
 }
 
-struct SampleLabCollectionProvider: LabCollectionProviding {
-    func fetchCollectionItems() async -> [LabCollectionItem] {
-        [
-            makeItem("Suiseiseki", maker: "VOLKS", year: "2007", category: "BJD", symbol: "person.crop.circle", color: 0xB84631),
-            makeItem("Blue Hour", maker: "MIRA VALE", year: "1987", category: "VINYL", symbol: "record.circle", color: 0x536D78),
-            makeItem("Moon Garden", maker: "M. ITO", year: "2021", category: "POSTER", symbol: "moon.stars", color: 0x56746E),
-            makeItem("Youth 02", maker: "BLUE ROOM", year: "2024", category: "PHOTOCARD", symbol: "rectangle.portrait", color: 0xA68E9A),
-            makeItem("Heliot", maker: "SOOM", year: "2008", category: "BJD", symbol: "sparkles", color: 0x8A7B68)
-        ]
-    }
-
-    private func makeItem(_ name: String, maker: String, year: String, category: String, symbol: String, color: UInt32) -> LabCollectionItem {
-        let size = CGSize(width: 900, height: 1100)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { context in
-            UIColor(red: 0.95, green: 0.93, blue: 0.89, alpha: 1).setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-
-            let tint = UIColor(
-                red: CGFloat((color >> 16) & 0xFF) / 255,
-                green: CGFloat((color >> 8) & 0xFF) / 255,
-                blue: CGFloat(color & 0xFF) / 255,
-                alpha: 1
-            )
-            tint.setFill()
-            context.cgContext.fillEllipse(in: CGRect(x: 125, y: 160, width: 650, height: 650))
-
-            if let icon = UIImage(systemName: symbol)?.withTintColor(.white, renderingMode: .alwaysOriginal) {
-                icon.draw(in: CGRect(x: 270, y: 300, width: 360, height: 360))
-            }
-            let style = NSMutableParagraphStyle()
-            style.alignment = .center
-            name.uppercased().draw(
-                in: CGRect(x: 70, y: 885, width: 760, height: 100),
-                withAttributes: [
-                    .font: UIFont.systemFont(ofSize: 50, weight: .semibold),
-                    .foregroundColor: UIColor.black,
-                    .paragraphStyle: style
-                ]
-            )
-        }
-        return LabCollectionItem(name: name, maker: maker, year: year, category: category, image: image)
-    }
-}
-
 @MainActor
 final class LabEditorStore: ObservableObject {
     @Published var project: LabProject
